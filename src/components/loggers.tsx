@@ -1,0 +1,470 @@
+"use client";
+import { useState } from "react";
+import {
+  Plus,
+  Minus,
+  Check,
+  Clock3,
+  Dumbbell,
+  Heart,
+  ArrowUpRight,
+} from "lucide-react";
+import { componentSchemas, type Instance } from "@/lib/domain/components";
+import { totalSetVolume } from "@/lib/domain/operators";
+import {
+  label,
+  newEvent,
+  type EventInput,
+  type EventRecord,
+} from "@/lib/domain/events";
+import { localInput, number, formatDate, formatTime } from "./ui";
+type Props = {
+  instance: Instance;
+  events: EventRecord[];
+  save: (events: EventInput[]) => Promise<boolean>;
+};
+function When({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="when">
+      <button
+        type="button"
+        className="text-button"
+        onClick={() => setOpen(!open)}
+      >
+        <Clock3 size={13} />
+        {open
+          ? "Event date & time"
+          : value
+            ? `${formatDate(value)} · ${formatTime(value)}`
+            : "Now · change time"}
+      </button>
+      {open && (
+        <label className="sr-label">
+          Event date & time
+          <input
+            aria-label="Event date and time"
+            type="datetime-local"
+            required
+            value={value || localInput()}
+            onChange={(e) => onChange(e.target.value)}
+          />
+        </label>
+      )}
+      {open && value && (
+        <button
+          className="text-button"
+          type="button"
+          onClick={() => {
+            onChange("");
+            setOpen(false);
+          }}
+        >
+          Use current time
+        </button>
+      )}
+    </div>
+  );
+}
+export function PainLogger({ instance, save }: Props) {
+  const config = componentSchemas.pain_logger.parse(instance.config);
+  const [levels, setLevels] = useState<Record<string, number>>({});
+  const [notes, setNotes] = useState("");
+  const [time, setTime] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    const batchId = config.targets.length > 1 ? crypto.randomUUID() : null;
+    try {
+      const ok = await save(
+        config.targets.map((injuryId) =>
+          newEvent(
+            "pain_measurement",
+            { injuryId, painLevel: levels[injuryId] ?? 3 },
+            {
+              notes: config.showNotes ? notes || null : null,
+              occurredAt: (time ? new Date(time) : new Date()).toISOString(),
+              batchId,
+            },
+          ),
+        ),
+      );
+      if (ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Unable to save. Check your inputs.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form onSubmit={submit} className="logger">
+      <p className="card-description">A moment to check in with your body.</p>
+      {config.targets.map((target) => (
+        <div className="pain-target" key={target}>
+          <div className="pain-value">
+            <span>
+              {config.targets.length > 1
+                ? label(target)
+                : "How does it feel today?"}
+            </span>
+            <div>
+              <strong>{levels[target] ?? 3}</strong>
+              <span> / 10</span>
+            </div>
+          </div>
+          <input
+            className="pain-slider"
+            style={
+              {
+                "--progress": `${(levels[target] ?? 3) * 10}%`,
+              } as React.CSSProperties
+            }
+            aria-label={`${label(target)} pain level`}
+            aria-valuetext={`${levels[target] ?? 3} out of 10`}
+            type="range"
+            min="0"
+            max="10"
+            step="1"
+            value={levels[target] ?? 3}
+            onChange={(e) => {
+              setLevels({ ...levels, [target]: Number(e.target.value) });
+              setSaved(false);
+            }}
+          />
+          <div className="range-labels">
+            <span>0 · No pain</span>
+            <span>10 · Severe</span>
+          </div>
+        </div>
+      ))}
+      {config.showNotes && (
+        <label>
+          Notes <span className="muted">(optional)</span>
+          <textarea
+            value={notes}
+            maxLength={4000}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Anything worth remembering?"
+            rows={2}
+          />
+        </label>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="logger-footer">
+        <When value={time} onChange={setTime} />
+        <button className="button primary" disabled={busy}>
+          {saved ? <Check size={16} /> : <Plus size={16} />}{" "}
+          {busy
+            ? "Saving…"
+            : saved
+              ? "Saved"
+              : config.targets.length > 1
+                ? "Save all"
+                : "Save check-in"}
+        </button>
+      </div>
+      <div className="card-footnote">
+        <Heart size={12} /> Every check-in adds to the picture.
+      </div>
+    </form>
+  );
+}
+export function ExerciseLogger({ instance, events, save }: Props) {
+  const config = componentSchemas.exercise_logger.parse(instance.config);
+  const [sets, setSets] = useState([
+    { reps: config.defaultReps, weightKg: config.defaultWeight },
+    { reps: config.defaultReps, weightKg: config.defaultWeight },
+    { reps: config.defaultReps, weightKg: config.defaultWeight },
+  ]);
+  const [parent, setParent] = useState("new");
+  const [workoutName, setWorkoutName] = useState("Lower body workout");
+  const [time, setTime] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const occurredAt = (time ? new Date(time) : new Date()).toISOString();
+      const workout =
+        parent === "new"
+          ? newEvent("workout", { name: workoutName }, { occurredAt })
+          : null;
+      const exercise = newEvent(
+        "exercise",
+        { exerciseId: config.exerciseId, sets },
+        {
+          occurredAt,
+          parentEventId: workout?.id ?? (parent || null),
+          notes: config.showNotes ? notes || null : null,
+        },
+      );
+      if (await save(workout ? [workout, exercise] : [exercise])) {
+        setSaved(true);
+        if (workout) setParent(workout.id);
+        setTimeout(() => setSaved(false), 2500);
+      }
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Unable to save. Check your inputs.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  const total = totalSetVolume(sets);
+  return (
+    <form onSubmit={submit} className="logger">
+      <div className="exercise-meta">
+        <span>
+          <Dumbbell size={13} /> {label(config.exerciseId)}
+        </span>
+        <span>kg</span>
+      </div>
+      <div className="sets-table">
+        <div className="set-row set-head">
+          <span>SET</span>
+          <span>REPS</span>
+          <span>WEIGHT (KG)</span>
+          <span />
+        </div>
+        {sets.map((set, i) => (
+          <div className="set-row" key={i}>
+            <span className="set-index">{String(i + 1).padStart(2, "0")}</span>
+            <input
+              aria-label={`Set ${i + 1} reps`}
+              type="number"
+              min="1"
+              max="1000"
+              required
+              value={set.reps}
+              onChange={(e) =>
+                setSets(
+                  sets.map((s, n) =>
+                    n === i ? { ...s, reps: Number(e.target.value) } : s,
+                  ),
+                )
+              }
+            />
+            <input
+              aria-label={`Set ${i + 1} weight`}
+              type="number"
+              min="0"
+              max="2000"
+              step="0.5"
+              required
+              value={set.weightKg}
+              onChange={(e) =>
+                setSets(
+                  sets.map((s, n) =>
+                    n === i ? { ...s, weightKg: Number(e.target.value) } : s,
+                  ),
+                )
+              }
+            />
+            <button
+              type="button"
+              className="icon-button"
+              disabled={sets.length === 1}
+              aria-label={`Remove set ${i + 1}`}
+              onClick={() => setSets(sets.filter((_, n) => n !== i))}
+            >
+              <Minus size={15} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="set-actions">
+        <button
+          className="text-button accent"
+          type="button"
+          disabled={sets.length >= 100}
+          onClick={() => setSets([...sets, { ...sets[sets.length - 1] }])}
+        >
+          <Plus size={14} /> Add set
+        </button>
+        <span>
+          {number(total)} <span className="muted">kg·reps</span>
+        </span>
+      </div>
+      <details className="workout-options">
+        <summary>Workout & logging details</summary>
+        <label>
+          Workout
+          <select value={parent} onChange={(e) => setParent(e.target.value)}>
+            <option value="new">Create a new workout</option>
+            <option value="">No workout</option>
+            {events
+              .filter((e) => e.eventType === "workout")
+              .map((e) => (
+                <option key={e.id} value={e.id}>
+                  {(e.payload as { name: string }).name} ·{" "}
+                  {new Date(e.occurredAt).toLocaleDateString()}
+                </option>
+              ))}
+          </select>
+        </label>
+        {parent === "new" && (
+          <label>
+            Workout name
+            <input
+              value={workoutName}
+              required
+              maxLength={120}
+              onChange={(e) => setWorkoutName(e.target.value)}
+            />
+          </label>
+        )}
+      </details>
+      {config.showNotes && (
+        <label>
+          Notes (optional)
+          <textarea
+            value={notes}
+            maxLength={4000}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+          />
+        </label>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="logger-footer">
+        <When value={time} onChange={setTime} />
+        <button className="button primary" disabled={busy}>
+          <Check size={16} />{" "}
+          {busy ? "Saving…" : saved ? "Saved" : "Save exercise"}
+        </button>
+      </div>
+    </form>
+  );
+}
+export function OtherLogger({ instance, save }: Props) {
+  const session = instance.componentDefinitionId === "session_logger";
+  const config = session
+    ? componentSchemas.session_logger.parse(instance.config)
+    : componentSchemas.value_logger.parse(instance.config);
+  const [time, setTime] = useState("");
+  const [end, setEnd] = useState("");
+  const [value, setValue] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const occurredAt = (time ? new Date(time) : new Date()).toISOString();
+      const input =
+        "activityId" in config
+          ? newEvent(
+              "training_session",
+              { activityId: config.activityId },
+              {
+                occurredAt,
+                startedAt: end ? occurredAt : null,
+                endedAt: end ? new Date(end).toISOString() : null,
+                notes: notes || null,
+              },
+            )
+          : newEvent(
+              "measurement",
+              {
+                metricId: config.metricId,
+                value: Number(value),
+                unit: config.unit,
+              },
+              { occurredAt, notes: notes || null },
+            );
+      if (await save([input])) {
+        setNotes("");
+        setValue("");
+      }
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Unable to save. Check your inputs.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="logger" onSubmit={submit}>
+      <p className="card-description">
+        {"activityId" in config
+          ? `Make ${label(config.activityId).toLowerCase()} part of the picture.`
+          : `Track ${label(config.metricId).toLowerCase()} over time.`}
+      </p>
+      {"activityId" in config ? (
+        <label>
+          End time <span className="muted">(optional)</span>
+          <input
+            type="datetime-local"
+            value={end}
+            min={time}
+            onChange={(e) => setEnd(e.target.value)}
+          />
+        </label>
+      ) : (
+        <label>
+          Value ({config.unit})
+          <input
+            type="number"
+            step="any"
+            required
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </label>
+      )}
+      {config.showNotes && (
+        <label>
+          Notes (optional)
+          <textarea
+            value={notes}
+            maxLength={4000}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </label>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="logger-footer">
+        <When value={time} onChange={setTime} />
+        <button className="button primary" disabled={busy}>
+          {busy ? "Saving…" : "Save entry"}
+          <ArrowUpRight size={15} />
+        </button>
+      </div>
+    </form>
+  );
+}
