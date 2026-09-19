@@ -185,44 +185,6 @@ export function ComponentSettings({
             <small>For example: left-knee, right-knee, left-ankle</small>
           </label>
         )}
-        {componentKey === "exercise_logger" && (
-          <>
-            <label>
-              Exercise ID
-              <input
-                value={String(config.exerciseId)}
-                onChange={(e) => field("exerciseId", e.target.value)}
-                required
-                maxLength={80}
-              />
-            </label>
-            <div className="form-grid">
-              <label>
-                Default reps
-                <input
-                  type="number"
-                  min="1"
-                  max="1000"
-                  value={Number(config.defaultReps)}
-                  onChange={(e) => field("defaultReps", Number(e.target.value))}
-                />
-              </label>
-              <label>
-                Default weight (kg)
-                <input
-                  type="number"
-                  min="0"
-                  max="2000"
-                  step="0.5"
-                  value={Number(config.defaultWeight)}
-                  onChange={(e) =>
-                    field("defaultWeight", Number(e.target.value))
-                  }
-                />
-              </label>
-            </div>
-          </>
-        )}
         {componentKey === "session_logger" && (
           <label>
             Activity ID
@@ -356,6 +318,12 @@ export function ComponentSettings({
               />
             </label>
           </>
+        )}
+        {componentKey === "weekly_summary" && (
+          <p className="muted">
+            Counts activity over the last seven calendar days in your local
+            timezone.
+          </p>
         )}
         {componentKey === "recent_events" && (
           <label>

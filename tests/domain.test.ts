@@ -300,12 +300,13 @@ describe("authorization and configuration", () => {
   it("validates all built-in component configurations", () => {
     for (const key of [
       "pain_logger",
-      "exercise_logger",
+      "workout_logger",
       "session_logger",
       "value_logger",
       "graph",
       "statistic",
       "recent_events",
+      "weekly_summary",
     ] as const)
       expect(instanceInputSchema.safeParse(makeInstance(key, 0)).success).toBe(
         true,

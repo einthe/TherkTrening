@@ -10,8 +10,12 @@ test("palettes recolor the interface and charts, persist across pages, and prese
   await page.goto("/demo");
   const picker = page.getByRole("combobox", { name: "Color palette" });
   await expect(
-    page.getByRole("button", { name: "Save exercise", exact: true }),
+    page.getByRole("button", { name: "Save workout", exact: true }),
   ).toBeVisible();
+  await page
+    .locator(".workout-logger")
+    .getByRole("button", { name: /^Squat.*sets/ })
+    .click();
   await page
     .getByRole("spinbutton", { name: "Set 1 reps", exact: true })
     .fill("8");
@@ -39,7 +43,7 @@ test("palettes recolor the interface and charts, persist across pages, and prese
     "rgb(130, 210, 216)",
   );
   await page
-    .getByRole("button", { name: "Settings for Squat", exact: true })
+    .getByRole("button", { name: "Settings for Workout", exact: true })
     .click();
   expect(
     await page

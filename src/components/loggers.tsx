@@ -1,13 +1,6 @@
 "use client";
 import { useState } from "react";
-import {
-  Plus,
-  Minus,
-  Check,
-  Clock3,
-  Dumbbell,
-  ArrowUpRight,
-} from "lucide-react";
+import { Plus, Minus, Check, Clock3, ArrowUpRight } from "lucide-react";
 import { componentSchemas, type Instance } from "@/lib/domain/components";
 import { totalSetVolume } from "@/lib/domain/operators";
 import {
@@ -22,7 +15,7 @@ type Props = {
   events: EventRecord[];
   save: (events: EventInput[]) => Promise<boolean>;
 };
-function When({
+export function When({
   value,
   onChange,
 }: {
@@ -180,182 +173,6 @@ export function PainLogger({ instance, save }: Props) {
     </form>
   );
 }
-export function ExerciseLogger({ instance, events, save }: Props) {
-  const config = componentSchemas.exercise_logger.parse(instance.config);
-  const [sets, setSets] = useState([
-    { reps: config.defaultReps, weightKg: config.defaultWeight },
-    { reps: config.defaultReps, weightKg: config.defaultWeight },
-    { reps: config.defaultReps, weightKg: config.defaultWeight },
-  ]);
-  const [parent, setParent] = useState("new");
-  const [workoutName, setWorkoutName] = useState("Lower body workout");
-  const [time, setTime] = useState("");
-  const [notes, setNotes] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      const occurredAt = (time ? new Date(time) : new Date()).toISOString();
-      const workout =
-        parent === "new"
-          ? newEvent("workout", { name: workoutName }, { occurredAt })
-          : null;
-      const exercise = newEvent(
-        "exercise",
-        { exerciseId: config.exerciseId, sets },
-        {
-          occurredAt,
-          parentEventId: workout?.id ?? (parent || null),
-          notes: config.showNotes ? notes || null : null,
-        },
-      );
-      if (await save(workout ? [workout, exercise] : [exercise])) {
-        setSaved(true);
-        if (workout) setParent(workout.id);
-        setTimeout(() => setSaved(false), 2500);
-      }
-    } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Unable to save. Check your inputs.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-  const total = totalSetVolume(sets);
-  return (
-    <form onSubmit={submit} className="logger">
-      <div className="exercise-meta">
-        <span>
-          <Dumbbell size={13} /> {label(config.exerciseId)}
-        </span>
-        <span>kg</span>
-      </div>
-      <div className="sets-table">
-        <div className="set-row set-head">
-          <span>SET</span>
-          <span>REPS</span>
-          <span>WEIGHT (KG)</span>
-          <span />
-        </div>
-        {sets.map((set, i) => (
-          <div className="set-row" key={i}>
-            <span className="set-index">{String(i + 1).padStart(2, "0")}</span>
-            <input
-              aria-label={`Set ${i + 1} reps`}
-              type="number"
-              min="1"
-              max="1000"
-              required
-              value={set.reps}
-              onChange={(e) =>
-                setSets(
-                  sets.map((s, n) =>
-                    n === i ? { ...s, reps: Number(e.target.value) } : s,
-                  ),
-                )
-              }
-            />
-            <input
-              aria-label={`Set ${i + 1} weight`}
-              type="number"
-              min="0"
-              max="2000"
-              step="0.5"
-              required
-              value={set.weightKg}
-              onChange={(e) =>
-                setSets(
-                  sets.map((s, n) =>
-                    n === i ? { ...s, weightKg: Number(e.target.value) } : s,
-                  ),
-                )
-              }
-            />
-            <button
-              type="button"
-              className="icon-button"
-              disabled={sets.length === 1}
-              aria-label={`Remove set ${i + 1}`}
-              onClick={() => setSets(sets.filter((_, n) => n !== i))}
-            >
-              <Minus size={15} />
-            </button>
-          </div>
-        ))}
-      </div>
-      <div className="set-actions">
-        <button
-          className="text-button accent"
-          type="button"
-          disabled={sets.length >= 100}
-          onClick={() => setSets([...sets, { ...sets[sets.length - 1] }])}
-        >
-          <Plus size={14} /> Add set
-        </button>
-        <span>
-          {number(total)} <span className="muted">kg·reps</span>
-        </span>
-      </div>
-      <details className="workout-options">
-        <summary>Workout & logging details</summary>
-        <label>
-          Workout
-          <select value={parent} onChange={(e) => setParent(e.target.value)}>
-            <option value="new">Create a new workout</option>
-            <option value="">No workout</option>
-            {events
-              .filter((e) => e.eventType === "workout")
-              .map((e) => (
-                <option key={e.id} value={e.id}>
-                  {(e.payload as { name: string }).name} ·{" "}
-                  {new Date(e.occurredAt).toLocaleDateString()}
-                </option>
-              ))}
-          </select>
-        </label>
-        {parent === "new" && (
-          <label>
-            Workout name
-            <input
-              value={workoutName}
-              required
-              maxLength={120}
-              onChange={(e) => setWorkoutName(e.target.value)}
-            />
-          </label>
-        )}
-      </details>
-      {config.showNotes && (
-        <label>
-          Notes (optional)
-          <textarea
-            value={notes}
-            maxLength={4000}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-          />
-        </label>
-      )}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-      <div className="logger-footer">
-        <When value={time} onChange={setTime} />
-        <button className="button primary" disabled={busy}>
-          <Check size={16} />{" "}
-          {busy ? "Saving…" : saved ? "Saved" : "Save exercise"}
-        </button>
-      </div>
-    </form>
-  );
-}
 export function OtherLogger({ instance, save }: Props) {
   const session = instance.componentDefinitionId === "session_logger";
   const config = session
@@ -458,5 +275,85 @@ export function OtherLogger({ instance, save }: Props) {
         </button>
       </div>
     </form>
+  );
+}
+
+export function SetEditor({
+  sets,
+  setSets,
+}: {
+  sets: { reps: number; weightKg: number }[];
+  setSets: (sets: { reps: number; weightKg: number }[]) => void;
+}) {
+  const total = totalSetVolume(sets);
+  return (
+    <>
+      <div className="sets-table">
+        <div className="set-row set-head">
+          <span>SET</span>
+          <span>REPS</span>
+          <span>WEIGHT (KG)</span>
+          <span />
+        </div>
+        {sets.map((set, i) => (
+          <div className="set-row" key={i}>
+            <span className="set-index">{String(i + 1).padStart(2, "0")}</span>
+            <input
+              aria-label={`Set ${i + 1} reps`}
+              type="number"
+              min="1"
+              max="1000"
+              required
+              value={set.reps}
+              onChange={(e) =>
+                setSets(
+                  sets.map((s, n) =>
+                    n === i ? { ...s, reps: Number(e.target.value) } : s,
+                  ),
+                )
+              }
+            />
+            <input
+              aria-label={`Set ${i + 1} weight`}
+              type="number"
+              min="0"
+              max="2000"
+              step="0.5"
+              required
+              value={set.weightKg}
+              onChange={(e) =>
+                setSets(
+                  sets.map((s, n) =>
+                    n === i ? { ...s, weightKg: Number(e.target.value) } : s,
+                  ),
+                )
+              }
+            />
+            <button
+              type="button"
+              className="icon-button"
+              disabled={sets.length === 1}
+              aria-label={`Remove set ${i + 1}`}
+              onClick={() => setSets(sets.filter((_, n) => n !== i))}
+            >
+              <Minus size={15} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="set-actions">
+        <button
+          className="text-button accent"
+          type="button"
+          disabled={sets.length >= 100}
+          onClick={() => setSets([...sets, { ...sets[sets.length - 1] }])}
+        >
+          <Plus size={14} /> Add set
+        </button>
+        <span>
+          {number(total)} <span className="muted">kg·reps</span>
+        </span>
+      </div>
+    </>
   );
 }

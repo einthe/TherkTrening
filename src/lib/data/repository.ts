@@ -1,3 +1,8 @@
+import type {
+  WorkoutTemplate,
+  TemplateInput,
+  CustomExercise,
+} from "@/lib/domain/workouts";
 import type { EventInput, EventRecord, Profile } from "@/lib/domain/events";
 import type {
   Definition,
@@ -6,6 +11,8 @@ import type {
 } from "@/lib/domain/components";
 export type Snapshot = {
   profile: Profile;
+  workoutTemplates: WorkoutTemplate[];
+  customExercises: CustomExercise[];
   events: EventRecord[];
   instances: Instance[];
   definitions: {
@@ -15,6 +22,8 @@ export type Snapshot = {
   };
 };
 export type Mutation =
+  | { action: "saveWorkoutTemplate"; template: TemplateInput }
+  | { action: "createExercise"; exercise: CustomExercise }
   | { action: "createEvents"; events: EventInput[] }
   | { action: "editEvent"; event: EventInput; expectedUpdatedAt: string }
   | { action: "deleteEvent"; id: string; expectedUpdatedAt: string }

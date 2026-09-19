@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { pipelineSchema, type Pipeline } from "./operators";
+import { defaultExercise, workoutExercisesSchema } from "./workouts";
 const common = { showNotes: z.boolean().default(false) };
 export const graphSourceSchema = z
   .object({
@@ -19,13 +20,8 @@ export const componentSchemas = {
         .refine((v) => new Set(v).size === v.length, "Targets must be unique."),
     })
     .strict(),
-  exercise_logger: z
-    .object({
-      ...common,
-      exerciseId: z.string().trim().min(1).max(80),
-      defaultReps: z.number().int().min(1).max(1000),
-      defaultWeight: z.number().min(0).max(2000),
-    })
+  workout_logger: z
+    .object({ ...common, exercises: workoutExercisesSchema })
     .strict(),
   session_logger: z
     .object({ ...common, activityId: z.string().trim().min(1).max(80) })
@@ -52,6 +48,7 @@ export const componentSchemas = {
     })
     .strict(),
   recent_events: z.object({ limit: z.number().int().min(1).max(50) }).strict(),
+  weekly_summary: z.object({}).strict(),
 };
 export type ComponentKey = keyof typeof componentSchemas;
 export type GraphConfig = z.infer<typeof componentSchemas.graph>;
@@ -87,6 +84,17 @@ export const painPipeline = (injury = "left-knee"): Pipeline => [
 ];
 export const componentDefinitions = [
   {
+    key: "weekly_summary",
+    name: "Last 7 days",
+    kind: "display",
+    description:
+      "Training sessions, pain check-ins, and active days over the past week.",
+    icon: "activity",
+    supportedEventTypes: [],
+    capabilities: { canReadEvents: true },
+    config: {},
+  },
+  {
     key: "pain_logger",
     name: "Pain check-in",
     kind: "logger",
@@ -97,19 +105,15 @@ export const componentDefinitions = [
     config: { targets: ["left-knee"], showNotes: false },
   },
   {
-    key: "exercise_logger",
-    name: "Exercise logger",
+    key: "workout_logger",
+    name: "Workout",
     kind: "logger",
-    description: "Log reps and weight for each set.",
+    description:
+      "Log a workout with expandable exercises and reusable templates.",
     icon: "dumbbell",
     supportedEventTypes: ["exercise", "workout"],
     capabilities: { canCreateEvents: true, canCreateMultipleEvents: true },
-    config: {
-      exerciseId: "squat",
-      defaultReps: 5,
-      defaultWeight: 80,
-      showNotes: false,
-    },
+    config: { exercises: [defaultExercise()], showNotes: false },
   },
   {
     key: "graph",

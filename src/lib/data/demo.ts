@@ -1,5 +1,11 @@
 import {
+  templateInputSchema,
+  customExerciseSchema,
+  defaultExercise,
+} from "@/lib/domain/workouts";
+import {
   assertMutable,
+  label,
   eventInputSchema,
   newEvent,
   validateParent,
@@ -81,17 +87,33 @@ export function createDemo(): Snapshot {
       );
   }
   const instances = (
-    ["pain_logger", "exercise_logger", "graph", "recent_events"] as const
+    [
+      "weekly_summary",
+      "pain_logger",
+      "workout_logger",
+      "graph",
+      "recent_events",
+    ] as const
   ).map((key, i) => ({
     ...makeInstance(key, i),
+    ...(key === "workout_logger"
+      ? {
+          config: {
+            exercises: [defaultExercise("squat", 5, 80)],
+            showNotes: false,
+          },
+        }
+      : {}),
     title:
       key === "pain_logger"
         ? "Left knee pain"
-        : key === "exercise_logger"
-          ? "Squat"
+        : key === "workout_logger"
+          ? "Workout"
           : key === "graph"
             ? "Training volume & pain"
-            : "Recent activity",
+            : key === "weekly_summary"
+              ? "Last 7 days"
+              : "Recent activity",
     userId: USER,
     createdAt: now,
     updatedAt: now,
@@ -105,6 +127,8 @@ export function createDemo(): Snapshot {
     },
     events,
     instances,
+    workoutTemplates: [],
+    customExercises: [],
     definitions: {
       components: componentDefinitions.map((d) => ({
         key: d.key,
@@ -129,7 +153,54 @@ export function createDemo(): Snapshot {
 export class DemoRepository implements Repository {
   async load(): Promise<Snapshot> {
     const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const state: Snapshot = JSON.parse(raw);
+      for (const definition of componentDefinitions) {
+        if (
+          !state.definitions.components.some((d) => d.key === definition.key)
+        ) {
+          state.definitions.components.push({
+            key: definition.key,
+            name: definition.name,
+            version: 1,
+            active: true,
+          });
+        }
+      }
+      state.workoutTemplates ??= [];
+      state.customExercises ??= [];
+      for (const instance of state.instances) {
+        if ((instance.componentDefinitionId as string) === "exercise_logger") {
+          const config = instance.config as {
+            exerciseId: string;
+            defaultReps: number;
+            defaultWeight: number;
+            showNotes: boolean;
+          };
+          instance.componentDefinitionId = "workout_logger";
+          if (
+            ["Squat", "Exercise logger", label(config.exerciseId)].some(
+              (title) => title.toLowerCase() === instance.title.toLowerCase(),
+            )
+          )
+            instance.title = "Workout";
+          instance.config = {
+            exercises: [
+              defaultExercise(
+                config.exerciseId,
+                config.defaultReps,
+                config.defaultWeight,
+              ),
+            ],
+            showNotes: config.showNotes,
+          };
+        }
+      }
+      state.definitions.components = state.definitions.components.filter(
+        (d) => d.key !== "exercise_logger",
+      );
+      return state;
+    }
     const state = createDemo();
     localStorage.setItem(KEY, JSON.stringify(state));
     return state;
@@ -137,7 +208,33 @@ export class DemoRepository implements Repository {
   async mutate(m: Mutation) {
     const s = await this.load();
     const now = new Date().toISOString();
-    if (m.action === "createEvents") {
+    if (m.action === "saveWorkoutTemplate") {
+      const input = templateInputSchema.parse(m.template);
+      if (
+        s.workoutTemplates.some(
+          (t) =>
+            t.id === input.id ||
+            t.name.toLowerCase() === input.name.toLowerCase(),
+        )
+      )
+        throw new Error("Invalid template name: choose a new name.");
+      s.workoutTemplates.push({
+        ...input,
+        userId: s.profile.id,
+        createdAt: now,
+      });
+    } else if (m.action === "createExercise") {
+      const input = customExerciseSchema.parse(m.exercise);
+      if (
+        s.customExercises.some(
+          (e) =>
+            e.id === input.id ||
+            e.name.toLowerCase() === input.name.toLowerCase(),
+        )
+      )
+        throw new Error("Invalid exercise name: this exercise already exists.");
+      s.customExercises.push(input);
+    } else if (m.action === "createEvents") {
       const inputs = m.events.map((e) => eventInputSchema.parse(e));
       if (
         inputs.some((e) => s.events.some((old) => old.id === e.id)) ||

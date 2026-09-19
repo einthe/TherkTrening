@@ -4,6 +4,7 @@ import {
   mutationSchema,
   eventFromRow,
   instanceFromRow,
+  templateFromRow,
 } from "@/lib/data/server-repository";
 export async function GET() {
   const profile = await currentProfile();
@@ -13,16 +14,33 @@ export async function GET() {
       { status: 403 },
     );
   const db = await supabaseServer();
-  const [events, instances, components, eventDefs, operators] =
-    await Promise.all([
-      readAllEvents(db),
-      db.from("user_component_instances").select("*").order("position"),
-      db.from("component_definitions").select("key,name,version,active"),
-      db.from("event_type_definitions").select("key,name,version,active"),
-      db.from("operator_definitions").select("key,name,version,active"),
-    ]);
+  const [
+    events,
+    instances,
+    components,
+    eventDefs,
+    operators,
+    templates,
+    exercises,
+  ] = await Promise.all([
+    readAllEvents(db),
+    db.from("user_component_instances").select("*").order("position"),
+    db.from("component_definitions").select("key,name,version,active"),
+    db.from("event_type_definitions").select("key,name,version,active"),
+    db.from("operator_definitions").select("key,name,version,active"),
+    readAllRows(db, "workout_templates"),
+    readAllRows(db, "user_exercises"),
+  ]);
   if (
-    [events, instances, components, eventDefs, operators].some((r) => r.error)
+    [
+      events,
+      instances,
+      components,
+      eventDefs,
+      operators,
+      templates,
+      exercises,
+    ].some((r) => r.error)
   )
     return NextResponse.json(
       { error: "Unable to load your workspace. Please try again." },
@@ -31,6 +49,8 @@ export async function GET() {
   return NextResponse.json(
     {
       profile,
+      workoutTemplates: templates.data!.map(templateFromRow),
+      customExercises: exercises.data!.map((r) => ({ id: r.id, name: r.name })),
       events: events.data!.map(eventFromRow),
       instances: instances.data!.map(instanceFromRow),
       definitions: {
@@ -61,7 +81,13 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   const db = await supabaseServer();
-  const { error } = await db.rpc("mutate_workspace", { mutation: body.data });
+  const { error } = await db.rpc(
+    body.data.action === "saveWorkoutTemplate" ||
+      body.data.action === "createExercise"
+      ? "mutate_workout_library"
+      : "mutate_workspace",
+    { mutation: body.data },
+  );
   if (error) {
     const known = [
       "Unlock this event",
@@ -99,5 +125,22 @@ async function readAllEvents(db: Awaited<ReturnType<typeof supabaseServer>>) {
     if (error) return { data: null, error };
     events.push(...data);
     if (data.length < 1000) return { data: events, error: null };
+  }
+}
+
+async function readAllRows(
+  db: Awaited<ReturnType<typeof supabaseServer>>,
+  table: "workout_templates" | "user_exercises",
+) {
+  const rows: Record<string, unknown>[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await db
+      .from(table)
+      .select("*")
+      .order("id")
+      .range(offset, offset + 999);
+    if (error) return { data: null, error };
+    rows.push(...data);
+    if (data.length < 1000) return { data: rows, error: null };
   }
 }

@@ -1,7 +1,24 @@
+import {
+  templateInputSchema,
+  customExerciseSchema,
+  type WorkoutTemplate,
+} from "@/lib/domain/workouts";
 import { z } from "zod";
 import { eventInputSchema, type EventRecord } from "@/lib/domain/events";
 import { instanceInputSchema, type Instance } from "@/lib/domain/components";
 export const mutationSchema = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("saveWorkoutTemplate"),
+      template: templateInputSchema,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("createExercise"),
+      exercise: customExerciseSchema,
+    })
+    .strict(),
   z
     .object({
       action: z.literal("createEvents"),
@@ -79,4 +96,17 @@ export function instanceFromRow(r: Record<string, unknown>): Instance {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   } as Instance;
+}
+
+export function templateFromRow(r: Record<string, unknown>): WorkoutTemplate {
+  return {
+    ...templateInputSchema.parse({
+      id: r.id,
+      name: r.name,
+      version: r.version,
+      exercises: r.exercises,
+    }),
+    userId: String(r.user_id),
+    createdAt: String(r.created_at),
+  };
 }

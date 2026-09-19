@@ -12,6 +12,8 @@ import {
 } from "recharts";
 import {
   Activity,
+  Check,
+  Settings2,
   ArrowUpRight,
   Dumbbell,
   Heart,
@@ -366,6 +368,94 @@ export function Statistic({
           {value === null && <p>No measurements recorded yet.</p>}
         </>
       )}
+    </div>
+  );
+}
+
+export function WeeklySummary({
+  instance,
+  events,
+  onSettings,
+}: {
+  instance: Instance;
+  events: EventRecord[];
+  onSettings: () => void;
+}) {
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 6);
+  weekStart.setHours(0, 0, 0, 0);
+  const weekEvents = events.filter(
+    (e) =>
+      Date.parse(e.occurredAt) >= weekStart.getTime() &&
+      Date.parse(e.occurredAt) <= new Date().getTime(),
+  );
+  const sessions = weekEvents.filter(
+    (e) => e.eventType === "workout" || e.eventType === "training_session",
+  ).length;
+  const checkIns = weekEvents.filter(
+    (e) => e.eventType === "pain_measurement",
+  ).length;
+  const activeDays = new Set(
+    weekEvents.map((e) => new Date(e.occurredAt).toLocaleDateString()),
+  ).size;
+  return (
+    <div className="overview-strip">
+      <div className="overview-title">
+        <span className="overview-icon">
+          <Activity size={20} />
+        </span>
+        <div>
+          <h2>{instance.title}</h2>
+        </div>
+        <button
+          className="icon-button"
+          aria-label={`Settings for ${instance.title}`}
+          onClick={onSettings}
+        >
+          <Settings2 size={16} />
+        </button>
+      </div>
+      <div className="overview-stat">
+        <strong>{String(sessions).padStart(2, "0")}</strong>
+        <span>training sessions</span>
+      </div>
+      <div className="overview-stat">
+        <strong>{String(checkIns).padStart(2, "0")}</strong>
+        <span>pain check-ins</span>
+      </div>
+      <div className="overview-stat">
+        <strong>
+          {String(activeDays).padStart(2, "0")}
+          <small> / 7</small>
+        </strong>
+        <span>days checked in</span>
+      </div>
+      <div
+        className="week-dots"
+        aria-label={`${activeDays} days with recorded activity in the past week`}
+      >
+        {Array.from({ length: 7 }, (_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() - 6 + i);
+          const active = weekEvents.some(
+            (e) =>
+              new Date(e.occurredAt).toLocaleDateString() ===
+              d.toLocaleDateString(),
+          );
+          return (
+            <div key={i}>
+              <span>
+                {d.toLocaleDateString("en-GB", {
+                  weekday: "narrow",
+                })}
+              </span>
+              <i className={active ? "filled" : ""}>
+                {active ? <Check size={12} /> : null}
+              </i>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

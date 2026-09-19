@@ -17,10 +17,10 @@ import {
   CalendarDays,
   Check,
   X,
-  EyeOff,
   Menu,
 } from "lucide-react";
 import { Brand } from "./auth";
+import { WorkoutLogger } from "./workout-logger";
 import { PaletteSelector } from "./palette-selector";
 import {
   HttpRepository,
@@ -36,8 +36,8 @@ import {
 } from "@/lib/domain/components";
 import { type EventInput, type EventRecord } from "@/lib/domain/events";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { PainLogger, ExerciseLogger, OtherLogger } from "./loggers";
-import { Graph, RecentEvents, Statistic } from "./displays";
+import { PainLogger, OtherLogger } from "./loggers";
+import { Graph, RecentEvents, Statistic, WeeklySummary } from "./displays";
 import {
   ComponentBrowser,
   ComponentSettings,
@@ -122,6 +122,8 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
   function navigate(p: Page) {
     setPage(p);
     setMobileNav(false);
+    setCustomize(false);
+    setRemoving(null);
   }
   const instances = [...(snapshot?.instances ?? [])].sort(
     (a, b) => a.position - b.position,
@@ -136,24 +138,6 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
   const operators =
     snapshot?.definitions.operators.filter((o) => o.active).map((o) => o.key) ??
     [];
-  const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - 6);
-  weekStart.setHours(0, 0, 0, 0);
-  const weekEvents =
-    snapshot?.events.filter(
-      (e) =>
-        Date.parse(e.occurredAt) >= weekStart.getTime() &&
-        Date.parse(e.occurredAt) <= new Date().getTime(),
-    ) ?? [];
-  const sessions = weekEvents.filter(
-    (e) => e.eventType === "workout" || e.eventType === "training_session",
-  ).length;
-  const checkIns = weekEvents.filter(
-    (e) => e.eventType === "pain_measurement",
-  ).length;
-  const activeDays = new Set(
-    weekEvents.map((e) => new Date(e.occurredAt).toLocaleDateString()),
-  ).size;
   const titles = {
     dashboard: "Dashboard",
     history: "Event history",
@@ -180,8 +164,23 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       );
     if (i.componentDefinitionId === "pain_logger")
       return <PainLogger {...props} />;
-    if (i.componentDefinitionId === "exercise_logger")
-      return <ExerciseLogger {...props} />;
+    if (i.componentDefinitionId === "workout_logger")
+      return (
+        <WorkoutLogger
+          {...props}
+          templates={snapshot!.workoutTemplates}
+          customExercises={snapshot!.customExercises}
+          saveTemplate={(template) =>
+            mutate(
+              { action: "saveWorkoutTemplate", template },
+              "Workout template saved",
+            )
+          }
+          createExercise={(exercise) =>
+            mutate({ action: "createExercise", exercise }, "Exercise created")
+          }
+        />
+      );
     if (
       i.componentDefinitionId === "session_logger" ||
       i.componentDefinitionId === "value_logger"
@@ -189,6 +188,18 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       return <OtherLogger {...props} />;
     if (i.componentDefinitionId === "graph")
       return <Graph {...props} operators={operators} />;
+    if (i.componentDefinitionId === "weekly_summary") {
+      componentSchemas.weekly_summary.parse(i.config);
+      return (
+        <WeeklySummary
+          instance={i}
+          events={snapshot!.events}
+          onSettings={() =>
+            setSettings({ key: i.componentDefinitionId, existing: i })
+          }
+        />
+      );
+    }
     if (i.componentDefinitionId === "statistic")
       return <Statistic {...props} operators={operators} />;
     return (
@@ -308,17 +319,19 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             <div>
               <h1>{titles[page]}</h1>
             </div>
-            {(page === "dashboard" || page === "components") && (
+            {page === "components" && (
               <div className="heading-actions">
-                {page === "dashboard" && (
-                  <button
-                    className={`button secondary ${customize ? "selected" : ""}`}
-                    onClick={() => setCustomize(!customize)}
-                  >
-                    {customize ? <Check size={15} /> : <Settings2 size={15} />}
-                    {customize ? "Done" : "Customize"}
-                  </button>
-                )}
+                <button
+                  className={`button secondary ${customize ? "selected" : ""}`}
+                  aria-pressed={customize}
+                  onClick={() => {
+                    setCustomize(!customize);
+                    setRemoving(null);
+                  }}
+                >
+                  {customize ? <Check size={15} /> : <Settings2 size={15} />}
+                  {customize ? "Done" : "Customize"}
+                </button>
                 <button
                   className="button primary"
                   onClick={() => setBrowser(true)}
@@ -349,66 +362,9 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             <>
               {page === "dashboard" && (
                 <>
-                  <div className="overview-strip">
-                    <div className="overview-title">
-                      <span className="overview-icon">
-                        <Activity size={20} />
-                      </span>
-                      <div>
-                        <strong>Last 7 days</strong>
-                      </div>
-                    </div>
-                    <div className="overview-stat">
-                      <strong>{String(sessions).padStart(2, "0")}</strong>
-                      <span>training sessions</span>
-                    </div>
-                    <div className="overview-stat">
-                      <strong>{String(checkIns).padStart(2, "0")}</strong>
-                      <span>pain check-ins</span>
-                    </div>
-                    <div className="overview-stat">
-                      <strong>
-                        {String(activeDays).padStart(2, "0")}
-                        <small> / 7</small>
-                      </strong>
-                      <span>days checked in</span>
-                    </div>
-                    <div
-                      className="week-dots"
-                      aria-label={`${activeDays} days with recorded activity in the past week`}
-                    >
-                      {Array.from({ length: 7 }, (_, i) => {
-                        const d = new Date();
-                        d.setDate(d.getDate() - 6 + i);
-                        const active = weekEvents.some(
-                          (e) =>
-                            new Date(e.occurredAt).toLocaleDateString() ===
-                            d.toLocaleDateString(),
-                        );
-                        return (
-                          <div key={i}>
-                            <span>
-                              {d.toLocaleDateString("en-GB", {
-                                weekday: "narrow",
-                              })}
-                            </span>
-                            <i className={active ? "filled" : ""}>
-                              {active ? <Check size={12} /> : null}
-                            </i>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  {customize && (
-                    <div className="notice">
-                      Use the arrows to reorder cards, or open a card’s settings
-                      to change its title, targets, and visibility.
-                    </div>
-                  )}
                   <div className="dashboard-grid">
                     {instances
-                      .filter((i) => i.enabled || customize)
+                      .filter((i) => i.enabled)
                       .map((i) => {
                         const def = componentDefinitions.find(
                           (d) => d.key === i.componentDefinitionId,
@@ -416,54 +372,35 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                         const Icon = def ? componentIcons[def.icon] : Activity;
                         return (
                           <section
-                            className={`card dashboard-card ${i.componentDefinitionId === "graph" ? "graph-card" : ""} ${!i.enabled ? "disabled-card" : ""}`}
+                            className={`card dashboard-card ${i.componentDefinitionId === "graph" ? "graph-card" : ""} ${i.componentDefinitionId === "weekly_summary" ? "summary-card" : ""}`}
                             key={i.id}
                           >
-                            <div className="card-heading">
-                              <h2>
-                                <span
-                                  className={`card-icon ${i.componentDefinitionId}`}
-                                >
-                                  <Icon size={17} />
-                                </span>
-                                {i.title}
-                                {!i.enabled && <EyeOff size={14} />}
-                              </h2>
-                              <div className="card-controls">
-                                {customize && (
-                                  <>
-                                    <button
-                                      className="icon-button"
-                                      aria-label={`Move ${i.title} up`}
-                                      disabled={instances[0].id === i.id}
-                                      onClick={() => move(i, -1)}
-                                    >
-                                      <ArrowUp size={15} />
-                                    </button>
-                                    <button
-                                      className="icon-button"
-                                      aria-label={`Move ${i.title} down`}
-                                      disabled={instances.at(-1)?.id === i.id}
-                                      onClick={() => move(i, 1)}
-                                    >
-                                      <ArrowDown size={15} />
-                                    </button>
-                                  </>
-                                )}
-                                <button
-                                  className="icon-button"
-                                  aria-label={`Settings for ${i.title}`}
-                                  onClick={() =>
-                                    setSettings({
-                                      key: i.componentDefinitionId,
-                                      existing: i,
-                                    })
-                                  }
-                                >
-                                  <Settings2 size={16} />
-                                </button>
+                            {i.componentDefinitionId !== "weekly_summary" && (
+                              <div className="card-heading">
+                                <h2>
+                                  <span
+                                    className={`card-icon ${i.componentDefinitionId}`}
+                                  >
+                                    <Icon size={17} />
+                                  </span>
+                                  {i.title}
+                                </h2>
+                                <div className="card-controls">
+                                  <button
+                                    className="icon-button"
+                                    aria-label={`Settings for ${i.title}`}
+                                    onClick={() =>
+                                      setSettings({
+                                        key: i.componentDefinitionId,
+                                        existing: i,
+                                      })
+                                    }
+                                  >
+                                    <Settings2 size={16} />
+                                  </button>
+                                </div>
                               </div>
-                            </div>
+                            )}
                             <CardBoundary key={i.updatedAt}>
                               <DeferredCard render={() => renderComponent(i)} />
                             </CardBoundary>
@@ -473,13 +410,15 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                     {!instances.some((i) => i.enabled) && (
                       <button
                         className="add-empty"
-                        onClick={() => setBrowser(true)}
+                        onClick={() => navigate("components")}
                       >
                         <Plus size={30} />
                         <h2>No components</h2>
-                        <p>Add your first component to start logging.</p>
+                        <p>
+                          Choose which components to show on your dashboard.
+                        </p>
                         <span className="button primary">
-                          Browse components <ArrowUpRight size={15} />
+                          Go to Components <ArrowUpRight size={15} />
                         </span>
                       </button>
                     )}
@@ -491,6 +430,12 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
               )}{" "}
               {page === "components" && (
                 <div className="component-management">
+                  {customize && (
+                    <div className="notice">
+                      Use the arrows to reorder components, or remove any you no
+                      longer need. Open Settings to change visibility.
+                    </div>
+                  )}
                   {instances.map((i, index) => (
                     <section className="card manage-card" key={i.id}>
                       <span className="manage-number">
@@ -508,22 +453,26 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                         </p>
                       </div>
                       <div className="manage-actions">
-                        <button
-                          className="icon-button"
-                          aria-label={`Move ${i.title} up`}
-                          disabled={index === 0}
-                          onClick={() => move(i, -1)}
-                        >
-                          <ArrowUp size={17} />
-                        </button>
-                        <button
-                          className="icon-button"
-                          aria-label={`Move ${i.title} down`}
-                          disabled={index === instances.length - 1}
-                          onClick={() => move(i, 1)}
-                        >
-                          <ArrowDown size={17} />
-                        </button>
+                        {customize && (
+                          <>
+                            <button
+                              className="icon-button"
+                              aria-label={`Move ${i.title} up`}
+                              disabled={index === 0}
+                              onClick={() => move(i, -1)}
+                            >
+                              <ArrowUp size={17} />
+                            </button>
+                            <button
+                              className="icon-button"
+                              aria-label={`Move ${i.title} down`}
+                              disabled={index === instances.length - 1}
+                              onClick={() => move(i, 1)}
+                            >
+                              <ArrowDown size={17} />
+                            </button>
+                          </>
+                        )}
                         <button
                           className="button secondary small"
                           onClick={() =>
@@ -536,38 +485,39 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                           <Settings2 size={14} />
                           Settings
                         </button>
-                        {removing === i.id ? (
-                          <>
-                            <span className="micro">Remove this card?</span>
+                        {customize &&
+                          (removing === i.id ? (
+                            <>
+                              <span className="micro">Remove this card?</span>
+                              <button
+                                className="button danger small"
+                                onClick={async () => {
+                                  await mutate(
+                                    { action: "removeInstance", id: i.id },
+                                    "Component removed. Your events are preserved.",
+                                  );
+                                  setRemoving(null);
+                                }}
+                              >
+                                Remove component
+                              </button>
+                              <button
+                                className="icon-button"
+                                aria-label="Cancel removal"
+                                onClick={() => setRemoving(null)}
+                              >
+                                <X size={15} />
+                              </button>
+                            </>
+                          ) : (
                             <button
-                              className="button danger small"
-                              onClick={async () => {
-                                await mutate(
-                                  { action: "removeInstance", id: i.id },
-                                  "Component removed. Your events are preserved.",
-                                );
-                                setRemoving(null);
-                              }}
+                              className="icon-button danger-text"
+                              aria-label={`Remove ${i.title}`}
+                              onClick={() => setRemoving(i.id)}
                             >
-                              Remove component
+                              <Trash2 size={16} />
                             </button>
-                            <button
-                              className="icon-button"
-                              aria-label="Cancel removal"
-                              onClick={() => setRemoving(null)}
-                            >
-                              <X size={15} />
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            className="icon-button danger-text"
-                            aria-label={`Remove ${i.title}`}
-                            onClick={() => setRemoving(i.id)}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
+                          ))}
                       </div>
                     </section>
                   ))}

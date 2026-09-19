@@ -9,15 +9,17 @@ test("reference flow: configure, log, graph, edit, lock, unlock, backdate, persi
     .click();
   await expect(page.getByRole("status")).toContainText("Event saved");
   await page
+    .locator(".workout-logger")
+    .getByRole("button", { name: /^Squat.*sets/ })
+    .click();
+  await page
     .getByRole("spinbutton", { name: "Set 3 reps", exact: true })
     .fill("3");
   await page
     .getByRole("spinbutton", { name: "Set 3 weight", exact: true })
     .fill("90");
-  await expect(page.getByText("1,070", { exact: false })).toBeVisible();
-  await page
-    .getByRole("button", { name: "Save exercise", exact: true })
-    .click();
+  await expect(page.locator(".workout-total")).toContainText("1,070");
+  await page.getByRole("button", { name: "Save workout", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("2 events saved");
   await expect(
     page.getByRole("img", {
@@ -61,7 +63,7 @@ test("reference flow: configure, log, graph, edit, lock, unlock, backdate, persi
   await page.getByRole("button", { name: "Edit event", exact: true }).click();
   await page.getByLabel("Pain level (0–10)").fill("2");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await page.getByRole("button", { name: "Components", exact: true }).click();
   await page
     .getByRole("button", { name: "Add component", exact: true })
     .click();
@@ -78,6 +80,7 @@ test("reference flow: configure, log, graph, edit, lock, unlock, backdate, persi
   await expect(
     page.getByRole("heading", { name: "Morning joint check", exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   await page.getByRole("button", { name: "Save all", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("2 events saved");
   await page.reload();
@@ -92,8 +95,9 @@ test("component removal preserves events; reorder and visibility persist", async
 }) => {
   await page.goto("/demo");
   await page.getByRole("button", { name: "Components", exact: true }).click();
+  await page.getByRole("button", { name: "Customize", exact: true }).click();
   await page
-    .getByRole("button", { name: "Move Squat up", exact: true })
+    .getByRole("button", { name: "Move Workout up", exact: true })
     .click();
   await expect(page.getByRole("status")).toContainText(
     "Dashboard order updated",

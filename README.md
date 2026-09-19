@@ -16,7 +16,7 @@ Open <http://localhost:3000>. Without Supabase environment variables the app ope
 ## Connect Supabase
 
 1. Create **one shared Supabase project** for all users.
-2. Apply [`supabase/migrations/202609180001_initial.sql`](supabase/migrations/202609180001_initial.sql) using the SQL editor, or use the Supabase CLI:
+2. Apply all files in [`supabase/migrations`](supabase/migrations) in filename order using the SQL editor, or use the Supabase CLI:
 
    ```sh
    supabase link --project-ref YOUR_PROJECT_REF
@@ -58,8 +58,10 @@ For a completely local Supabase environment, install Docker and the Supabase CLI
 
 - Supabase email/password signup, login, confirmation, persisted cookie sessions, pending/rejected/disabled states, and logout.
 - One dashboard per user with add/remove/reorder, visibility, titles, tracked targets, notes, defaults, and chart settings.
+- Dashboard management lives on **Components**: use **Add component** to add cards and **Customize** to reorder or remove them. The optional **Last 7 days** component shows sessions, pain check-ins, and active days; its Settings control dashboard visibility.
 - Single- and multi-target pain logging. Each target becomes an independent event; one multi-target submission shares a batch UUID.
-- Exercise logging with independent reps/weight rows and optional new/existing workout parents. Workouts and child exercises save atomically.
+- Workout cards with expandable exercises, independent reps/weight rows, a standard exercise list, and private custom exercises. One save records the workout and all exercise children atomically.
+- Private workout templates, saved explicitly using **Save as template**. Loading a saved workout copies its exercises, reps, and weights into an editable draft; logging or changing the draft never overwrites the template.
 - Other training sessions with optional duration, and configurable numeric measurements.
 - Configurable line/bar graphs, statistics, a recent-events list, and searchable/filterable event history.
 - Backdating, structured editing, notes, reversible locks, deletion, and stale-edit detection.
@@ -71,9 +73,9 @@ For a completely local Supabase environment, install Docker and the Supabase CLI
 ## Reference workflow
 
 1. Add **Pain check-in**. Set title to `Left knee pain`, target to `left-knee`.
-2. Add **Exercise logger**. Set exercise ID to `squat`.
+2. In **Components**, add **Workout**. On the dashboard, expand Squat to enter its sets; use **Add exercise** or **Create an exercise** to build the rest of the workout.
 3. Add **Volume & pain**, using the default squat/left-knee sources and 21-day range.
-4. Save a pain reading. Log squat sets with different reps and weights, selecting or creating a workout in **Workout & logging details**.
+4. Save a pain reading. Enter different reps and weights for each exercise, collapsing rows as you go. Name the workout and click **Save workout** to log it. To reuse its structure later, choose **Save as template**, give it a unique name, and click **Save template**. It will then appear under **Saved workouts**.
 5. Compare the two recorded series. For identical sets, volume is **sets × reps × weightKg**. For sets with different reps or weights, volume is **the sum of each set’s reps × weightKg**, measured in kg·reps. For example, 3 sets of 5 reps at 80 kg = **1,200 kg·reps**; sets of 5 × 80 kg, 4 × 85 kg, and 3 × 90 kg = **1,010 kg·reps**. It is a **placeholder training-volume calculation**, not a medically validated loading-capacity estimate.
 6. Open **Event history** to edit/backdate, lock, unlock, or delete an event.
 
@@ -98,11 +100,13 @@ PLAYWRIGHT_CHANNEL=chrome npm run test:e2e
 
 `tests/domain.test.ts` covers event validation, configuration, operators, version handling, backdating, sparse-series alignment, and authorization helpers. `tests/database.test.ts` executes the actual migration in PGlite (PostgreSQL compiled to WASM); it stubs only Supabase's external Auth users table and JWT-subject lookup. Database tests cover real RLS, cross-user isolation, account approval/disablement, admin restrictions, parent links, atomic rollback, configuration validation, locking, explicit unlock, and stale writes.
 
-Playwright covers the reference dashboard workflow, non-uniform sets, rendered graph series, history edits, locks, backdating, multiple pain targets, local persistence, component reordering/removal, and mobile layout. The optional live Auth test requires a disposable local Supabase environment; see its environment variables in `tests/e2e/auth.spec.ts`. Never point test setup at a production project.
+Playwright covers the reference dashboard workflow, non-uniform sets, rendered graph series, history edits, locks, backdating, multiple pain targets, local persistence, component reordering/removal, workout templates, custom exercises, failed-save draft preservation, and mobile layout. The optional live Auth test requires a disposable local Supabase environment; see its environment variables in `tests/e2e/auth.spec.ts`. Never point test setup at a production project.
 
 ## Deployment
 
 The repository is ready to import into Vercel as a Next.js project. Configure Node 24, the two public Supabase variables, the production Supabase Auth URLs, and apply the migration before the first production login. The build command is `npm run build`. No Vercel-only services are used; a Node host can run `npm run build` followed by `npm start`.
+
+For an existing installation, apply new migrations with `supabase db push` before deploying the updated app. The `202609190001_weekly_summary.sql` migration enables **Last 7 days** in the component catalog; existing dashboards can opt in through **Components → Add component**. The `202609190002_workout_templates.sql` migration adds private templates/custom exercises and converts existing exercise cards to workout cards, preserving their defaults, visibility, and order. Historical events are unchanged.
 
 Connect `trening.therk.no` through your chosen hosting provider and set the DNS records it supplies. This implementation does not create a remote GitHub repository, provision Supabase, configure DNS, or publish a deployment.
 

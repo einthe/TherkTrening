@@ -91,6 +91,7 @@ test("live registration, pending access, admin approval, session persistence and
     await expect(
       page.getByRole("heading", { name: "Dashboard" }),
     ).toBeVisible();
+    await page.getByRole("button", { name: "Components", exact: true }).click();
     await page
       .getByRole("button", { name: "Add component", exact: true })
       .click();
@@ -101,6 +102,7 @@ test("live registration, pending access, admin approval, session persistence and
       .getByRole("button", { name: "Add component", exact: true })
       .last()
       .click();
+    await page.getByRole("button", { name: "Dashboard", exact: true }).click();
     await page
       .getByRole("button", { name: "Save check-in", exact: true })
       .click();
