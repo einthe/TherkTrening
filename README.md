@@ -66,6 +66,7 @@ For a completely local Supabase environment, install Docker and the Supabase CLI
 - A compiled/versioned component registry, versioned JSON events, declarative operator pipelines, and a storage interface separate from UI.
 - PostgreSQL-enforced approval, ownership, locking, validation, and admin authorization.
 - Responsive mobile layout, keyboard-accessible controls and dialogs, explicit chart legends, and a text table for chart data.
+- Forest, Petrol, Slate, and Plum palettes, selectable in the top bar and on the sign-in page. The choice is remembered in this browser and applies to charts, forms, and dialogs.
 
 ## Reference workflow
 

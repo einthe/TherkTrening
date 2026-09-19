@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { PaletteSelector } from "./palette-selector";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Activity, ArrowUpRight, Clock3 } from "lucide-react";
@@ -13,7 +14,6 @@ export function Brand() {
       </span>
       <span>
         Therk<span className="brand-light">Trening</span>
-        <small>YOUR PERSONAL TRAINING SPACE</small>
       </span>
     </span>
   );
@@ -76,35 +76,17 @@ export function AuthForm({ configured }: { configured: boolean }) {
   return (
     <main className="auth-page">
       <div className="auth-story">
-        <Brand />
-        <div>
-          <span className="eyebrow">SHOW UP. CHECK IN. KEEP GOING.</span>
-          <h1>
-            Your training.
-            <br />
-            The whole picture.
-          </h1>
-          <p>
-            A little more awareness. A little more progress.
-            <br />A personal space that brings it all together.
-          </p>
-          <div className="auth-art">
-            <Activity size={190} strokeWidth={0.7} />
-          </div>
+        <div className="auth-brand-row">
+          <Brand />
+          <PaletteSelector />
         </div>
-        <span className="muted">Built around you, one session at a time.</span>
+        <div className="auth-art" aria-hidden="true">
+          <Activity size={190} strokeWidth={0.7} />
+        </div>
       </div>
       <div className="auth-form-wrap">
         <div className="auth-form">
-          <span className="eyebrow">WELCOME TO THERKTRENING</span>
-          <h2>
-            {signup ? "Make room for progress." : "Good to see you again."}
-          </h2>
-          <p className="muted">
-            {signup
-              ? "Create an account to request access to your training space."
-              : "Sign in to pick up where you left off."}
-          </p>
+          <h1>{signup ? "Create account" : "Sign in"}</h1>
           {!configured ? (
             <div className="notice">
               Supabase isn’t connected yet. You can explore the app with a local
@@ -174,9 +156,7 @@ export function AuthForm({ configured }: { configured: boolean }) {
           <Link className="demo-link" href="/demo">
             Explore the demo <ArrowUpRight size={15} />
           </Link>
-          <p className="micro">
-            Your training data is private. New accounts require approval.
-          </p>
+          <p className="micro">New accounts require administrator approval.</p>
         </div>
       </div>
     </main>
@@ -186,17 +166,20 @@ export function AccountStatus({ status }: { status: string }) {
   const router = useRouter();
   return (
     <main className="status-page">
-      <Brand />
+      <div className="auth-brand-row">
+        <Brand />
+        <PaletteSelector />
+      </div>
       <div className="status-card">
         <Clock3 size={36} />
         <h1>
           {status === "pending"
-            ? "You’re on the list."
+            ? "Pending approval"
             : "Your account is unavailable."}
         </h1>
         <p>
           {status === "pending"
-            ? "Your account is waiting for administrator approval. Come back soon to start your training space."
+            ? "Your account is waiting for administrator approval."
             : `Your account has been ${status}. Contact the administrator if you think this is a mistake.`}
         </p>
         <button

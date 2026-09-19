@@ -73,11 +73,10 @@ export function Graph({
       };
     }
   }, [events, days, config.sources, operators]);
-  const colors = ["#b9df8c", "#b69bde"];
+  const colors = ["var(--chart-volume)", "var(--chart-pain)"];
   return (
     <>
       <div className="graph-toolbar">
-        <p className="card-description">Find the patterns in your training.</p>
         <select
           aria-label="Graph time range"
           value={days}
@@ -108,7 +107,7 @@ export function Graph({
       ) : !result.data.length ? (
         <div className="empty-state">
           <ChartNoAxesCombined />
-          <h3>Your bigger picture starts here.</h3>
+          <h3>No data in this range</h3>
           <p>Log a check-in or exercise to see your first data point.</p>
         </div>
       ) : (
@@ -124,7 +123,7 @@ export function Graph({
             >
               <CartesianGrid
                 vertical={false}
-                stroke="#29332e"
+                stroke="var(--line)"
                 strokeDasharray="3 5"
               />
               <XAxis
@@ -136,7 +135,7 @@ export function Graph({
                     timeZone: "UTC",
                   })
                 }
-                stroke="#77827b"
+                stroke="var(--muted)"
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
@@ -145,7 +144,7 @@ export function Graph({
               />
               <YAxis
                 yAxisId="0"
-                stroke="#87957d"
+                stroke="var(--muted)"
                 tickLine={false}
                 axisLine={false}
                 fontSize={11}
@@ -155,7 +154,7 @@ export function Graph({
                   yAxisId="1"
                   orientation="right"
                   width={35}
-                  stroke="#a293b3"
+                  stroke="var(--muted)"
                   domain={
                     config.sources[1].unit === "/10"
                       ? [0, 10]
@@ -168,12 +167,12 @@ export function Graph({
               )}
               <Tooltip
                 contentStyle={{
-                  background: "#202a24",
-                  border: "1px solid #3d4a40",
+                  background: "var(--surface-raised)",
+                  border: "1px solid var(--border-strong)",
                   borderRadius: 10,
                   fontSize: 12,
                 }}
-                labelStyle={{ color: "#a6afa8", marginBottom: 7 }}
+                labelStyle={{ color: "var(--text-soft)", marginBottom: 7 }}
                 formatter={(value, name) => [number(Number(value)), name]}
               />
               {config.sources.map((s, i) =>
@@ -199,7 +198,7 @@ export function Graph({
                     dot={{
                       r: 3,
                       fill: colors[i],
-                      stroke: "#17201a",
+                      stroke: "var(--card)",
                       strokeWidth: 2,
                     }}
                     activeDot={{ r: 5 }}
@@ -269,7 +268,6 @@ export function RecentEvents({
     .slice(0, limit);
   return (
     <>
-      <p className="card-description">The small steps that add up.</p>
       <div className="recent-list">
         {recent.length ? (
           recent.map((e) => {

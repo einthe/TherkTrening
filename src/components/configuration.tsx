@@ -41,12 +41,7 @@ export function ComponentBrowser({
   onClose: () => void;
 }) {
   return (
-    <Modal
-      title="Make this space yours."
-      subtitle="Add the tools that fit the way you train."
-      onClose={onClose}
-      wide
-    >
+    <Modal title="Add component" onClose={onClose} wide>
       <div className="component-browser">
         {componentDefinitions
           .filter((d) => definitions.some((g) => g.key === d.key && g.active))
@@ -156,7 +151,6 @@ export function ComponentSettings({
   return (
     <Modal
       title={existing ? "Component settings" : "Add a component"}
-      subtitle="A few details to make it work for you."
       onClose={onClose}
     >
       <form className="settings-form" onSubmit={submit}>

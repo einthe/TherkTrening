@@ -5,8 +5,9 @@ test("dashboard renders without runtime errors at desktop and mobile sizes", asy
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/demo");
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Let’s keep moving, Alex." }),
+    page.getByRole("button", { name: "Save check-in", exact: true }),
   ).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("desktop.png"),

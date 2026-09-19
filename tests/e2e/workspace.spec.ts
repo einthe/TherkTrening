@@ -3,9 +3,7 @@ test("reference flow: configure, log, graph, edit, lock, unlock, backdate, persi
   page,
 }) => {
   await page.goto("/demo");
-  await expect(
-    page.getByRole("heading", { name: "Let’s keep moving, Alex." }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await page
     .getByRole("button", { name: "Save check-in", exact: true })
     .click();

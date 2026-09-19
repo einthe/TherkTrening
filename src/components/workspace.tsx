@@ -19,9 +19,9 @@ import {
   X,
   EyeOff,
   Menu,
-  ChevronRight,
 } from "lucide-react";
 import { Brand } from "./auth";
+import { PaletteSelector } from "./palette-selector";
 import {
   HttpRepository,
   type Mutation,
@@ -155,9 +155,9 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     weekEvents.map((e) => new Date(e.occurredAt).toLocaleDateString()),
   ).size;
   const titles = {
-    dashboard: "Your dashboard",
+    dashboard: "Dashboard",
     history: "Event history",
-    components: "Your components",
+    components: "Components",
     admin: "Administration",
   };
   function renderComponent(i: Instance) {
@@ -213,7 +213,6 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             <X size={20} />
           </button>
         </div>
-        <div className="workspace-label">PERSONAL WORKSPACE</div>
         <nav aria-label="Main navigation">
           {(
             [
@@ -236,45 +235,14 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             </button>
           ))}
         </nav>
-        <div className="sidebar-note">
-          <span className="note-icon">
-            <Activity size={19} />
-          </span>
-          <h3>
-            Small steps.
-            <br />
-            Bigger picture.
-          </h3>
-          <p>
-            Stay curious about your training. Progress starts with showing up.
-          </p>
-          <div className="note-lines">
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-          </div>
-        </div>
         <div className="sidebar-bottom">
-          <span className="privacy-note">
-            <ShieldCheck size={13} />
-            {demo ? "Local demo workspace" : "Your data stays yours"}
-          </span>
           <div className="profile">
             <span className="avatar">
               {snapshot?.profile.username.slice(0, 2).toUpperCase() ?? "TT"}
             </span>
             <div>
               <strong>{snapshot?.profile.username ?? "Your workspace"}</strong>
-              <small>{demo ? "Demo account" : "Personal account"}</small>
+              {demo && <small>Demo account</small>}
             </div>
             <button
               className="icon-button"
@@ -308,18 +276,9 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             >
               <Menu size={21} />
             </button>
-            <span className="breadcrumb">
-              Workspace <ChevronRight size={13} />
-              <strong>{titles[page]}</strong>
-            </span>
           </div>
           <div className="topbar-right">
-            {demo && (
-              <span className="demo-badge">
-                <span />
-                DEMO MODE
-              </span>
-            )}
+            <PaletteSelector />
             <span className="today" suppressHydrationWarning>
               <CalendarDays size={14} />
               {new Date().toLocaleDateString("en-GB", {
@@ -338,38 +297,16 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             <div className="demo-banner">
               <span>
                 <span className="demo-dot" />
-                You’re exploring a demo. Changes are saved only in this browser.
+                Demo data is saved only in this browser.
               </span>
               <a href="/login">
-                Your own workspace <ArrowUpRight size={13} />
+                Sign in <ArrowUpRight size={13} />
               </a>
             </div>
           )}
           <div className="page-heading">
             <div>
-              <div className="eyebrow">
-                {page === "dashboard"
-                  ? "A LITTLE BETTER, EVERY DAY"
-                  : page === "history"
-                    ? "YOUR TRAINING TIMELINE"
-                    : page === "components"
-                      ? "BUILT AROUND YOU"
-                      : "WORKSPACE MANAGEMENT"}
-              </div>
-              <h1>
-                {page === "dashboard"
-                  ? `Let’s keep moving${snapshot ? `, ${snapshot.profile.username}` : ""}.`
-                  : titles[page]}
-              </h1>
-              <p>
-                {page === "dashboard"
-                  ? "Log your training. Check in with your body. See the bigger picture."
-                  : page === "history"
-                    ? "Every session, every check-in. Your progress, recorded."
-                    : page === "components"
-                      ? "Choose what you track and how you see it."
-                      : "Manage access and the tools available to everyone."}
-              </p>
+              <h1>{titles[page]}</h1>
             </div>
             {(page === "dashboard" || page === "components") && (
               <div className="heading-actions">
@@ -406,7 +343,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
           ) : !snapshot ? (
             <div className="loading-state">
               <span className="loading-dot" />
-              Loading your training space…
+              Loading…
             </div>
           ) : (
             <>
@@ -418,8 +355,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                         <Activity size={20} />
                       </span>
                       <div>
-                        <strong>A week in motion</strong>
-                        <span>Your last 7 days</span>
+                        <strong>Last 7 days</strong>
                       </div>
                     </div>
                     <div className="overview-stat">
@@ -463,15 +399,6 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                         );
                       })}
                     </div>
-                  </div>
-                  <div className="section-label">
-                    <span>
-                      YOUR SPACE{" "}
-                      <span className="count">
-                        {instances.filter((i) => i.enabled).length}
-                      </span>
-                    </span>
-                    <span>Make it a habit. Make it yours.</span>
                   </div>
                   {customize && (
                     <div className="notice">
@@ -549,7 +476,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                         onClick={() => setBrowser(true)}
                       >
                         <Plus size={30} />
-                        <h2>A fresh start.</h2>
+                        <h2>No components</h2>
                         <p>Add your first component to start logging.</p>
                         <span className="button primary">
                           Browse components <ArrowUpRight size={15} />
@@ -557,15 +484,6 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                       </button>
                     )}
                   </div>
-                  <footer className="dashboard-footer">
-                    <span>
-                      <span className="footer-dot" />A space for your progress.
-                      At your pace.
-                    </span>
-                    <span>
-                      THERKTRENING <span className="muted">/</span> EST. 2026
-                    </span>
-                  </footer>
                 </>
               )}
               {page === "history" && (
@@ -656,7 +574,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   {!instances.length && (
                     <div className="card empty-state">
                       <PanelsTopLeft />
-                      <h2>Room for your routine.</h2>
+                      <h2>No components</h2>
                       <p>Add your first component to get started.</p>
                     </div>
                   )}

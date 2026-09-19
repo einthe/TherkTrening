@@ -53,7 +53,7 @@ test("live registration, pending access, admin approval, session persistence and
       .getByRole("button", { name: "Create account", exact: true })
       .click();
     await expect(
-      page.getByRole("heading", { name: "You’re on the list." }),
+      page.getByRole("heading", { name: "Pending approval" }),
     ).toBeVisible();
     const { data: profile } = await service
       .from("profiles")
@@ -89,7 +89,7 @@ test("live registration, pending access, admin approval, session persistence and
       .toBe("approved");
     await page.getByRole("button", { name: "Check status" }).click();
     await expect(
-      page.getByRole("heading", { name: `Let’s keep moving, ${username}.` }),
+      page.getByRole("heading", { name: "Dashboard" }),
     ).toBeVisible();
     await page
       .getByRole("button", { name: "Add component", exact: true })
@@ -107,7 +107,7 @@ test("live registration, pending access, admin approval, session persistence and
     await expect(page.getByRole("status")).toContainText("Event saved");
     await page.reload();
     await expect(
-      page.getByRole("heading", { name: `Let’s keep moving, ${username}.` }),
+      page.getByRole("heading", { name: "Dashboard" }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(page).toHaveURL(/\/login/);

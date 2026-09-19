@@ -6,7 +6,6 @@ import {
   Check,
   Clock3,
   Dumbbell,
-  Heart,
   ArrowUpRight,
 } from "lucide-react";
 import { componentSchemas, type Instance } from "@/lib/domain/components";
@@ -113,14 +112,11 @@ export function PainLogger({ instance, save }: Props) {
   }
   return (
     <form onSubmit={submit} className="logger">
-      <p className="card-description">A moment to check in with your body.</p>
       {config.targets.map((target) => (
         <div className="pain-target" key={target}>
           <div className="pain-value">
             <span>
-              {config.targets.length > 1
-                ? label(target)
-                : "How does it feel today?"}
+              {config.targets.length > 1 ? label(target) : "Pain level"}
             </span>
             <div>
               <strong>{levels[target] ?? 3}</strong>
@@ -159,7 +155,6 @@ export function PainLogger({ instance, save }: Props) {
             value={notes}
             maxLength={4000}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Anything worth remembering?"
             rows={2}
           />
         </label>
@@ -181,9 +176,6 @@ export function PainLogger({ instance, save }: Props) {
                 ? "Save all"
                 : "Save check-in"}
         </button>
-      </div>
-      <div className="card-footnote">
-        <Heart size={12} /> Every check-in adds to the picture.
       </div>
     </form>
   );
@@ -418,8 +410,8 @@ export function OtherLogger({ instance, save }: Props) {
     <form className="logger" onSubmit={submit}>
       <p className="card-description">
         {"activityId" in config
-          ? `Make ${label(config.activityId).toLowerCase()} part of the picture.`
-          : `Track ${label(config.metricId).toLowerCase()} over time.`}
+          ? label(config.activityId)
+          : label(config.metricId)}
       </p>
       {"activityId" in config ? (
         <label>
