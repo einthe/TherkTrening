@@ -111,7 +111,7 @@ export const componentDefinitions = [
     description:
       "Log a workout with expandable exercises and reusable templates.",
     icon: "dumbbell",
-    supportedEventTypes: ["exercise", "workout"],
+    supportedEventTypes: ["workout"],
     capabilities: { canCreateEvents: true, canCreateMultipleEvents: true },
     config: { exercises: [defaultExercise()], showNotes: false },
   },

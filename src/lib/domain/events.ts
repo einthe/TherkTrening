@@ -1,27 +1,40 @@
 import { z } from "zod";
 
 const identifier = z.string().trim().min(1).max(80);
+export const exercisePayloadSchema = z
+  .object({
+    exerciseId: identifier,
+    sets: z
+      .array(
+        z
+          .object({
+            reps: z.number().int().min(0).max(1000),
+            weightKg: z.number().min(0).max(2000),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(100),
+  })
+  .strict();
+export const workoutExerciseSchema = exercisePayloadSchema
+  .extend({
+    occurredAt: z.iso.datetime({ offset: true }).optional(),
+    notes: z.string().max(4000).nullable().optional(),
+    legacy: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
 export const payloadSchemas = {
   pain_measurement: z
     .object({ injuryId: identifier, painLevel: z.number().min(0).max(10) })
     .strict(),
-  workout: z.object({ name: z.string().trim().min(1).max(120) }).strict(),
-  exercise: z
+  workout: z
     .object({
-      exerciseId: identifier,
-      sets: z
-        .array(
-          z
-            .object({
-              reps: z.number().int().min(1).max(1000),
-              weightKg: z.number().min(0).max(2000),
-            })
-            .strict(),
-        )
-        .min(1)
-        .max(100),
+      name: z.string().trim().min(1).max(120),
+      exercises: z.array(workoutExerciseSchema).min(1).max(1000).optional(),
     })
     .strict(),
+  exercise: exercisePayloadSchema,
   training_session: z.object({ activityId: identifier }).strict(),
   measurement: z
     .object({
@@ -152,7 +165,11 @@ export function validateParent(
   const parent = events.find(
     (e) => e.id === event.parentEventId && e.userId === userId,
   );
-  if (!parent || parent.eventType !== "workout")
+  if (
+    !parent ||
+    parent.eventType !== "workout" ||
+    "exercises" in (parent.payload as object)
+  )
     throw new Error("Select an existing workout that belongs to you.");
 }
 export function describeEvent(event: EventRecord): string {

@@ -50,7 +50,12 @@ export async function GET() {
     {
       profile,
       workoutTemplates: templates.data!.map(templateFromRow),
-      customExercises: exercises.data!.map((r) => ({ id: r.id, name: r.name })),
+      customExercises: exercises.data!.map((r) => ({
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        updatedAt: r.updated_at,
+      })),
       events: events.data!.map(eventFromRow),
       instances: instances.data!.map(instanceFromRow),
       definitions: {
@@ -83,7 +88,9 @@ export async function POST(request: Request) {
   const db = await supabaseServer();
   const { error } = await db.rpc(
     body.data.action === "saveWorkoutTemplate" ||
-      body.data.action === "createExercise"
+      body.data.action === "createExercise" ||
+      body.data.action === "saveExercise" ||
+      body.data.action === "deleteWorkoutTemplate"
       ? "mutate_workout_library"
       : "mutate_workspace",
     { mutation: body.data },

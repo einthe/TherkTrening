@@ -1,4 +1,5 @@
 "use client";
+import { NumericInput } from "./numeric-input";
 import { useState } from "react";
 import { Plus, Minus, Check, Clock3, ArrowUpRight } from "lucide-react";
 import { componentSchemas, type Instance } from "@/lib/domain/components";
@@ -281,7 +282,9 @@ export function OtherLogger({ instance, save }: Props) {
 export function SetEditor({
   sets,
   setSets,
+  template = false,
 }: {
+  template?: boolean;
   sets: { reps: number; weightKg: number }[];
   setSets: (sets: { reps: number; weightKg: number }[]) => void;
 }) {
@@ -289,46 +292,51 @@ export function SetEditor({
   return (
     <>
       <div className="sets-table">
-        <div className="set-row set-head">
+        <div
+          className={`set-row set-head ${template ? "template-set-row" : ""}`}
+        >
           <span>SET</span>
           <span>REPS</span>
-          <span>WEIGHT (KG)</span>
+          {!template && <span>WEIGHT (KG)</span>}
           <span />
         </div>
         {sets.map((set, i) => (
-          <div className="set-row" key={i}>
+          <div
+            className={`set-row ${template ? "template-set-row" : ""}`}
+            key={i}
+          >
             <span className="set-index">{String(i + 1).padStart(2, "0")}</span>
-            <input
+            <NumericInput
               aria-label={`Set ${i + 1} reps`}
               type="number"
-              min="1"
+              min="0"
               max="1000"
               required
               value={set.reps}
-              onChange={(e) =>
+              onValueChange={(value) =>
                 setSets(
-                  sets.map((s, n) =>
-                    n === i ? { ...s, reps: Number(e.target.value) } : s,
-                  ),
+                  sets.map((s, n) => (n === i ? { ...s, reps: value } : s)),
                 )
               }
             />
-            <input
-              aria-label={`Set ${i + 1} weight`}
-              type="number"
-              min="0"
-              max="2000"
-              step="0.5"
-              required
-              value={set.weightKg}
-              onChange={(e) =>
-                setSets(
-                  sets.map((s, n) =>
-                    n === i ? { ...s, weightKg: Number(e.target.value) } : s,
-                  ),
-                )
-              }
-            />
+            {!template && (
+              <NumericInput
+                aria-label={`Set ${i + 1} weight`}
+                type="number"
+                min="0"
+                max="2000"
+                step="0.5"
+                required
+                value={set.weightKg}
+                onValueChange={(value) =>
+                  setSets(
+                    sets.map((s, n) =>
+                      n === i ? { ...s, weightKg: value } : s,
+                    ),
+                  )
+                }
+              />
+            )}
             <button
               type="button"
               className="icon-button"
@@ -350,9 +358,11 @@ export function SetEditor({
         >
           <Plus size={14} /> Add set
         </button>
-        <span>
-          {number(total)} <span className="muted">kg·reps</span>
-        </span>
+        {!template && (
+          <span>
+            {number(total)} <span className="muted">kg·reps</span>
+          </span>
+        )}
       </div>
     </>
   );

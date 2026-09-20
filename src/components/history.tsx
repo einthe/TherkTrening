@@ -1,4 +1,7 @@
 "use client";
+import { WorkoutLogger } from "./workout-logger";
+import { NumericInput } from "./numeric-input";
+import { exerciseCatalog, type CustomExercise } from "@/lib/domain/workouts";
 import { useState } from "react";
 import {
   Search,
@@ -196,10 +199,12 @@ export function EventDetail({
   event,
   events,
   mutate,
+  customExercises,
   onClose,
 }: {
   event: EventRecord;
   events: EventRecord[];
+  customExercises: CustomExercise[];
   mutate: (m: Mutation, message?: string) => Promise<boolean>;
   onClose: () => void;
 }) {
@@ -273,14 +278,44 @@ export function EventDetail({
       setError(e instanceof Error ? e.message : "Check your inputs.");
     }
   }
+  const workout =
+    event.eventType === "workout"
+      ? payloadSchemas.workout.safeParse(event.payload)
+      : null;
+  const catalog = exerciseCatalog(customExercises, events);
   const sets = payload.sets as { reps: number; weightKg: number }[] | undefined;
   return (
     <Modal
-      title={editing ? "Edit event" : describeEvent(event)}
+      title={
+        editing
+          ? event.eventType === "workout"
+            ? "Edit workout"
+            : "Edit event"
+          : describeEvent(event)
+      }
       subtitle={`${eventNames[event.eventType]} · ${formatDate(event.occurredAt)} at ${formatTime(event.occurredAt)}`}
       onClose={onClose}
     >
-      {editing ? (
+      {editing && event.eventType === "workout" ? (
+        <WorkoutLogger
+          initialEvent={event}
+          events={events}
+          templates={[]}
+          customExercises={customExercises}
+          save={async ([input]) => {
+            const ok = await mutate(
+              {
+                action: "editEvent",
+                event: input,
+                expectedUpdatedAt: event.updatedAt,
+              },
+              "Workout updated",
+            );
+            if (ok) onClose();
+            return ok;
+          }}
+        />
+      ) : editing ? (
         <form onSubmit={save} className="settings-form">
           <label>
             Occurred at
@@ -351,35 +386,33 @@ export function EventDetail({
               {sets.map((s, i) => (
                 <div className="set-row" key={i}>
                   <span>{i + 1}</span>
-                  <input
+                  <NumericInput
                     aria-label={`Edit set ${i + 1} reps`}
                     type="number"
-                    min="1"
+                    min="0"
                     max="1000"
                     value={s.reps}
-                    onChange={(e) =>
+                    onValueChange={(value) =>
                       field(
                         "sets",
                         sets.map((r, n) =>
-                          n === i ? { ...r, reps: Number(e.target.value) } : r,
+                          n === i ? { ...r, reps: value } : r,
                         ),
                       )
                     }
                   />
-                  <input
+                  <NumericInput
                     aria-label={`Edit set ${i + 1} weight`}
                     type="number"
                     min="0"
                     max="2000"
                     step="0.5"
                     value={s.weightKg}
-                    onChange={(e) =>
+                    onValueChange={(value) =>
                       field(
                         "sets",
                         sets.map((r, n) =>
-                          n === i
-                            ? { ...r, weightKg: Number(e.target.value) }
-                            : r,
+                          n === i ? { ...r, weightKg: value } : r,
                         ),
                       )
                     }
@@ -520,6 +553,23 @@ export function EventDetail({
                 </>
               )}
             </dl>
+            {workout?.success && (
+              <div className="workout-exercises">
+                {workout.data.exercises?.map((exercise, index) => (
+                  <div className="workout-inline" key={index}>
+                    <strong>
+                      {catalog.find((e) => e.id === exercise.exerciseId)
+                        ?.name ?? exercise.exerciseId.replace(/-/g, " ")}
+                    </strong>
+                    {exercise.sets.map((set, i) => (
+                      <span key={i}>
+                        Set {i + 1}: {set.reps} reps × {set.weightKg} kg
+                      </span>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
             {event.notes && <blockquote>{event.notes}</blockquote>}
             <details>
               <summary>Recorded data · schema v{event.schemaVersion}</summary>
@@ -597,7 +647,9 @@ export function EventDetail({
                   onClick={() => setEditing(true)}
                 >
                   <Pencil size={15} />
-                  Edit event
+                  {event.eventType === "workout"
+                    ? "Edit workout"
+                    : "Edit event"}
                 </button>
               </div>
             </div>

@@ -9,8 +9,23 @@ import { instanceInputSchema, type Instance } from "@/lib/domain/components";
 export const mutationSchema = z.discriminatedUnion("action", [
   z
     .object({
+      action: z.literal("deleteWorkoutTemplate"),
+      id: z.uuid(),
+      expectedUpdatedAt: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("saveExercise"),
+      exercise: customExerciseSchema,
+      expectedUpdatedAt: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
       action: z.literal("saveWorkoutTemplate"),
       template: templateInputSchema,
+      expectedUpdatedAt: z.string().optional(),
     })
     .strict(),
   z
@@ -108,5 +123,6 @@ export function templateFromRow(r: Record<string, unknown>): WorkoutTemplate {
     }),
     userId: String(r.user_id),
     createdAt: String(r.created_at),
+    updatedAt: String(r.updated_at),
   };
 }

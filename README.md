@@ -60,8 +60,8 @@ For a completely local Supabase environment, install Docker and the Supabase CLI
 - One dashboard per user with add/remove/reorder, visibility, titles, tracked targets, notes, defaults, and chart settings.
 - Dashboard management lives on **Components**: use **Add component** to add cards and **Customize** to reorder or remove them. The optional **Last 7 days** component shows sessions, pain check-ins, and active days; its Settings control dashboard visibility.
 - Single- and multi-target pain logging. Each target becomes an independent event; one multi-target submission shares a batch UUID.
-- Workout cards with expandable exercises, independent reps/weight rows, a standard exercise list, and private custom exercises. One save records the workout and all exercise children atomically.
-- Private workout templates, saved explicitly using **Save as template**. Loading a saved workout copies its exercises, reps, and weights into an editable draft; logging or changing the draft never overwrites the template.
+- Workout cards with expandable exercises, independent reps/weight rows, a standard exercise list, and private custom exercises. One save creates a single workout record containing its exercises; history opens the same workout editor for updates.
+- Private workout templates, saved explicitly using **Save as template**. The **Workouts** page creates, edits, reorders, and deletes templates containing only exercises, sets, and reps. Loading a template starts every weight at zero; logging or changing the draft never overwrites the template. The **Exercises** page creates and edits names/descriptions, including personal overrides for standard exercises. Stable exercise IDs keep graphs and history linked.
 - Other training sessions with optional duration, and configurable numeric measurements.
 - Configurable line/bar graphs, statistics, a recent-events list, and searchable/filterable event history.
 - Backdating, structured editing, notes, reversible locks, deletion, and stale-edit detection.
@@ -73,9 +73,9 @@ For a completely local Supabase environment, install Docker and the Supabase CLI
 ## Reference workflow
 
 1. Add **Pain check-in**. Set title to `Left knee pain`, target to `left-knee`.
-2. In **Components**, add **Workout**. On the dashboard, expand Squat to enter its sets; use **Add exercise** or **Create an exercise** to build the rest of the workout.
+2. In **Components**, add **Workout**. On the dashboard, expand Squat to enter its sets; use **Add exercise** to build the rest of the workout. Create or edit exercises on the **Exercises** page.
 3. Add **Volume & pain**, using the default squat/left-knee sources and 21-day range.
-4. Save a pain reading. Enter different reps and weights for each exercise, collapsing rows as you go. Name the workout and click **Save workout** to log it. To reuse its structure later, choose **Save as template**, give it a unique name, and click **Save template**. It will then appear under **Saved workouts**.
+4. Save a pain reading. Numeric exercise inputs can be cleared while typing; an empty field becomes zero on blur and saves as zero. Enter different reps and weights for each exercise, collapsing rows as you go. Name the workout and click **Save workout** to log it. To reuse its structure later, choose **Save as template**, give it a unique name, and click **Save template**. It will then appear under **Saved workouts**.
 5. Compare the two recorded series. For identical sets, volume is **sets × reps × weightKg**. For sets with different reps or weights, volume is **the sum of each set’s reps × weightKg**, measured in kg·reps. For example, 3 sets of 5 reps at 80 kg = **1,200 kg·reps**; sets of 5 × 80 kg, 4 × 85 kg, and 3 × 90 kg = **1,010 kg·reps**. It is a **placeholder training-volume calculation**, not a medically validated loading-capacity estimate.
 6. Open **Event history** to edit/backdate, lock, unlock, or delete an event.
 
@@ -106,7 +106,7 @@ Playwright covers the reference dashboard workflow, non-uniform sets, rendered g
 
 The repository is ready to import into Vercel as a Next.js project. Configure Node 24, the two public Supabase variables, the production Supabase Auth URLs, and apply the migration before the first production login. The build command is `npm run build`. No Vercel-only services are used; a Node host can run `npm run build` followed by `npm start`.
 
-For an existing installation, apply new migrations with `supabase db push` before deploying the updated app. The `202609190001_weekly_summary.sql` migration enables **Last 7 days** in the component catalog; existing dashboards can opt in through **Components → Add component**. The `202609190002_workout_templates.sql` migration adds private templates/custom exercises and converts existing exercise cards to workout cards, preserving their defaults, visibility, and order. Historical events are unchanged.
+For an existing installation, apply new migrations with `supabase db push` before deploying the updated app. The `202609190001_weekly_summary.sql` migration enables **Last 7 days** in the component catalog; existing dashboards can opt in through **Components → Add component**. The `202609190002_workout_templates.sql` migration adds private templates/custom exercises and converts existing exercise cards to workout cards, preserving their defaults, visibility, and order. That migration leaves historical events unchanged. The newer `202609210001_workout_libraries.sql` migration removes template weights, adds library editing with stale-write protection, and nests older child exercise records inside their workout. Original child data is preserved under each exercise’s `legacy` field, including notes and timestamps; a workout becomes locked if any of its old exercises was locked. Apply the complete migration before deploying this update.
 
 Connect `trening.therk.no` through your chosen hosting provider and set the DNS records it supplies. This implementation does not create a remote GitHub repository, provision Supabase, configure DNS, or publish a deployment.
 
@@ -124,7 +124,7 @@ supabase/migrations/     Tables, grants, RLS, server validation, atomic mutation
 - Event storage never references component instances; removing cards cannot remove history.
 - Only the owner sees events. Database write grants are revoked from browser roles. All writes pass through narrow `SECURITY DEFINER` RPCs with fixed search paths, approval and ownership checks, and explicit validation. RLS remains enabled for reads. There are no service-role credentials in app code.
 - Database `created_at`/`updated_at` timestamps are authoritative. `occurred_at` is user-editable. Missing durations stay null.
-- Event type and owner cannot change through editing. Deleting a workout with children is blocked; detach/delete its exercises first.
+- Event type and owner cannot change through editing. Workouts are edited, locked, and deleted as one record containing their exercise sets. Standalone historical exercises remain readable. The operator layer derives exercise series from nested workout data without creating extra stored events.
 - Schema v1 readers validate known payloads. Unknown versions are not silently reinterpreted; a chart reports the incompatibility. Add a reader/migration before introducing a new incompatible version.
 - Daily aggregation and series alignment use **UTC calendar days**, explicitly stated below charts. Input times and history are shown in the user's browser timezone. Missing measurements remain null; chart lines do not connect across missing values. A future user timezone setting can extend aggregation without changing raw events.
 - Sources are independently filtered/transformed/aggregated, then joined by date. Numeric calculations do not live inside chart rendering code.

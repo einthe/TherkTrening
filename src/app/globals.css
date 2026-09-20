@@ -2247,3 +2247,58 @@ tbody tr:hover {
     flex-basis: 100%;
   }
 }
+.library-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.library-toolbar,
+.library-actions,
+.workout-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.library-toolbar {
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.library-toolbar input {
+  max-width: 380px;
+}
+.library-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.library-card > div:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.library-card p {
+  font-size: 12px;
+  margin-top: 5px;
+}
+.library-card .workout-confirm {
+  width: 100%;
+}
+.workout-row-actions {
+  margin-top: 12px;
+}
+.workout-row-actions > :first-child {
+  margin-right: auto;
+}
+.set-row.template-set-row {
+  grid-template-columns: 35px minmax(0, 1fr) 28px;
+}
+@media (max-width: 600px) {
+  .library-toolbar {
+    flex-wrap: wrap;
+  }
+  .library-toolbar p {
+    width: 100%;
+  }
+}

@@ -20,7 +20,7 @@ test("reference flow: configure, log, graph, edit, lock, unlock, backdate, persi
     .fill("90");
   await expect(page.locator(".workout-total")).toContainText("1,070");
   await page.getByRole("button", { name: "Save workout", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("2 events saved");
+  await expect(page.getByRole("status")).toContainText("Workout saved");
   await expect(
     page.getByRole("img", {
       name: /Squat volume compared with Left knee pain/,

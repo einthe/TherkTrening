@@ -22,7 +22,17 @@ export type Snapshot = {
   };
 };
 export type Mutation =
-  | { action: "saveWorkoutTemplate"; template: TemplateInput }
+  | {
+      action: "saveWorkoutTemplate";
+      template: TemplateInput;
+      expectedUpdatedAt?: string;
+    }
+  | { action: "deleteWorkoutTemplate"; id: string; expectedUpdatedAt: string }
+  | {
+      action: "saveExercise";
+      exercise: CustomExercise;
+      expectedUpdatedAt?: string;
+    }
   | { action: "createExercise"; exercise: CustomExercise }
   | { action: "createEvents"; events: EventInput[] }
   | { action: "editEvent"; event: EventInput; expectedUpdatedAt: string }

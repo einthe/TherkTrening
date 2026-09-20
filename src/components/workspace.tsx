@@ -1,8 +1,11 @@
 "use client";
+import { WorkoutLibrary, ExerciseLibrary } from "./workout-library";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
+  Dumbbell,
+  NotebookPen,
   LayoutDashboard,
   History,
   PanelsTopLeft,
@@ -47,7 +50,8 @@ import { EventHistory, EventDetail } from "./history";
 import { Admin } from "./admin";
 import { CardBoundary } from "./ui";
 
-type Page = "dashboard" | "history" | "components" | "admin";
+type Page =
+  "dashboard" | "history" | "components" | "admin" | "workouts" | "exercises";
 export function Workspace({ demo = false }: { demo?: boolean }) {
   const router = useRouter();
   const repository = useMemo(
@@ -116,7 +120,11 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
   async function saveEvents(events: EventInput[]) {
     return mutate(
       { action: "createEvents", events },
-      events.length > 1 ? `${events.length} events saved` : "Event saved",
+      events.length > 1
+        ? `${events.length} events saved`
+        : events[0]?.eventType === "workout"
+          ? "Workout saved"
+          : "Event saved",
     );
   }
   function navigate(p: Page) {
@@ -143,6 +151,8 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     history: "Event history",
     components: "Components",
     admin: "Administration",
+    workouts: "Workouts",
+    exercises: "Exercises",
   };
   function renderComponent(i: Instance) {
     const props = { instance: i, events: snapshot!.events, save: saveEvents };
@@ -176,9 +186,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
               "Workout template saved",
             )
           }
-          createExercise={(exercise) =>
-            mutate({ action: "createExercise", exercise }, "Exercise created")
-          }
+          onManageExercises={() => navigate("exercises")}
         />
       );
     if (
@@ -230,6 +238,8 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
               { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
               { key: "history", label: "Event history", icon: History },
               { key: "components", label: "Components", icon: PanelsTopLeft },
+              { key: "workouts", label: "Workouts", icon: NotebookPen },
+              { key: "exercises", label: "Exercises", icon: Dumbbell },
               ...(snapshot?.profile.role === "admin" && !demo
                 ? [{ key: "admin", label: "Administration", icon: ShieldCheck }]
                 : []),
@@ -425,6 +435,12 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                   </div>
                 </>
               )}
+              {page === "workouts" && (
+                <WorkoutLibrary snapshot={snapshot} mutate={mutate} />
+              )}
+              {page === "exercises" && (
+                <ExerciseLibrary snapshot={snapshot} mutate={mutate} />
+              )}
               {page === "history" && (
                 <EventHistory events={snapshot.events} onSelect={setSelected} />
               )}{" "}
@@ -577,6 +593,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
           key={selected.id}
           event={selected}
           events={snapshot.events}
+          customExercises={snapshot.customExercises}
           mutate={mutate}
           onClose={() => setSelected(null)}
         />

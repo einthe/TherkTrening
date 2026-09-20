@@ -128,6 +128,25 @@ export function runPipeline(
 ): Point[] {
   const pipeline = pipelineSchema.parse(serialized);
   let events = [...input];
+  if (
+    pipeline.some(
+      (step) => step.key === "filter_type" && step.eventType === "exercise",
+    )
+  ) {
+    events = events.flatMap((e) => {
+      if (e.eventType !== "workout" || e.schemaVersion !== 1) return [e];
+      const parsed = payloadSchemas.workout.safeParse(e.payload);
+      if (!parsed.success || !parsed.data.exercises) return [e];
+      return parsed.data.exercises.map((exercise, index) => ({
+        ...e,
+        id: `${e.id}:${index}`,
+        eventType: "exercise" as const,
+        occurredAt: exercise.occurredAt ?? e.occurredAt,
+        payload: { exerciseId: exercise.exerciseId, sets: exercise.sets },
+      }));
+    });
+  }
+
   let points: Point[] | null = null;
   for (const step of pipeline) {
     if (!allowed.includes(step.key))

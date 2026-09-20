@@ -2,7 +2,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { readFileSync, readdirSync } from "node:fs";
 import { newEvent } from "@/lib/domain/events";
-import { defaultExercise, workoutEvents } from "@/lib/domain/workouts";
+import {
+  defaultExercise,
+  workoutEvents,
+  withoutWeights,
+  fromTemplate,
+} from "@/lib/domain/workouts";
 import { makeInstance } from "@/lib/domain/components";
 // Runs the actual migration and RPCs in PostgreSQL (WASM). Only Supabase Auth's
 // external users table and JWT subject function are stubbed; RLS is real.
@@ -64,6 +69,33 @@ beforeAll(async () => {
         ],
       );
     }
+    if (file === "202609210001_workout_libraries.sql") {
+      await db.query(
+        "insert into public.workout_templates(id,user_id,name,exercises) values($1,$2,'Legacy template',$3)",
+        [
+          "77777777-7777-4777-8777-777777777777",
+          migrationUser,
+          JSON.stringify([defaultExercise("squat", 8, 70)]),
+        ],
+      );
+      await db.query(
+        "insert into public.events(id,user_id,event_type,schema_version,occurred_at,payload) values($1,$2,'workout',1,'2020-01-01T10:00:00Z',$3)",
+        [
+          "88888888-8888-4888-8888-888888888888",
+          migrationUser,
+          JSON.stringify({ name: "Legacy workout" }),
+        ],
+      );
+      await db.query(
+        "insert into public.events(id,user_id,event_type,schema_version,occurred_at,payload,parent_event_id,notes,is_locked) values($1,$2,'exercise',1,'2020-01-02T10:00:00Z',$3,$4,'Keep these notes',true)",
+        [
+          "99999999-9999-4999-8999-999999999999",
+          migrationUser,
+          JSON.stringify(defaultExercise("squat", 8, 70)),
+          "88888888-8888-4888-8888-888888888888",
+        ],
+      );
+    }
     await db.exec(readFileSync(`supabase/migrations/${file}`, "utf8"));
     if (file === "202609190002_workout_templates.sql")
       migratedCard = (
@@ -109,6 +141,38 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
       enabled: false,
       position: 3,
       config: { showNotes: true, exercises: [defaultExercise("squat", 7, 65)] },
+    });
+  });
+  it("converts legacy workouts without losing sets, notes, times or lock state, and removes template weights", async () => {
+    await asUser(migrationUser);
+    const migrated = await rows();
+    expect(migrated).toHaveLength(1);
+    expect(migrated[0]).toMatchObject({
+      id: "88888888-8888-4888-8888-888888888888",
+      event_type: "workout",
+      is_locked: true,
+      payload: {
+        name: "Legacy workout",
+        exercises: [
+          {
+            exerciseId: "squat",
+            sets: defaultExercise("squat", 8, 70).sets,
+            notes: "Keep these notes",
+            legacy: {
+              id: "99999999-9999-4999-8999-999999999999",
+              is_locked: true,
+            },
+          },
+        ],
+      },
+    });
+    expect(
+      (migrated[0].payload as { exercises: { occurredAt: string }[] })
+        .exercises[0].occurredAt,
+    ).toContain("2020-01-02");
+    expect((await rows("workout_templates"))[0]).toMatchObject({
+      version: 2,
+      exercises: withoutWeights([defaultExercise("squat", 8, 70)]),
     });
   });
   it("creates pending profiles and blocks workspace reads/writes", async () => {
@@ -336,11 +400,11 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
     const template = {
       id: crypto.randomUUID(),
       name: "Strength",
-      version: 1,
-      exercises: [
+      version: 2,
+      exercises: withoutWeights([
         defaultExercise("squat", 5, 80),
         defaultExercise("bench-press", 8, 40),
-      ],
+      ]),
     };
     await library({ action: "saveWorkoutTemplate", template });
     await library({
@@ -362,7 +426,7 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
           ],
         },
       }),
-    ).rejects.toThrow("Invalid set");
+    ).rejects.toThrow("Invalid template set");
     await expect(
       library({
         action: "saveWorkoutTemplate",
@@ -381,7 +445,7 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
           ...template,
           id: crypto.randomUUID(),
           name: "Invalid",
-          version: 2,
+          version: 3,
         },
       }),
     ).rejects.toThrow("Invalid template");
@@ -396,7 +460,7 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
     expect(await rows("user_exercises")).toHaveLength(0);
     await expect(
       library({ action: "saveWorkoutTemplate", template }),
-    ).rejects.toThrow("Invalid name");
+    ).rejects.toThrow("Invalid template owner");
     await expect(
       db.query(
         "update public.workout_templates set name='Stolen' where id=$1",
@@ -410,7 +474,7 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
     expect(await rows("workout_templates")).toHaveLength(0);
     expect(await rows("user_exercises")).toHaveLength(0);
     await asUser(alice);
-    const draft = structuredClone(template.exercises);
+    const draft = fromTemplate(template.exercises);
     draft[0].sets[0] = { reps: 3, weightKg: 90 };
     const events = workoutEvents(
       "Today",
@@ -421,7 +485,7 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
     await mutate({ action: "createEvents", events });
     expect(
       (await rows()).filter((e) => e.parent_event_id === events[0].id),
-    ).toHaveLength(2);
+    ).toHaveLength(0);
     expect((await rows("workout_templates"))[0].exercises).toEqual(
       template.exercises,
     );
@@ -429,6 +493,144 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
     await mutate({ action: "saveInstance", instance: card });
     await mutate({ action: "removeInstance", id: card.id });
     expect(await rows("workout_templates")).toHaveLength(1);
+  });
+  it("edits libraries with owner and stale-write checks and keeps a whole workout editable as one record", async () => {
+    await asUser(alice);
+    const template = (await rows("workout_templates"))[0];
+    const input = {
+      id: template.id,
+      name: "Updated template",
+      version: 2,
+      exercises: withoutWeights([defaultExercise("squat", 0)]),
+    };
+    await library({
+      action: "saveWorkoutTemplate",
+      template: input,
+      expectedUpdatedAt: template.updated_at,
+    });
+    await expect(
+      library({
+        action: "saveWorkoutTemplate",
+        template: input,
+        expectedUpdatedAt: template.updated_at,
+      }),
+    ).rejects.toThrow("changed elsewhere");
+    const latest = (await rows("workout_templates"))[0];
+    await expect(
+      library({
+        action: "saveWorkoutTemplate",
+        template: { ...input, exercises: [defaultExercise()] },
+        expectedUpdatedAt: latest.updated_at,
+      }),
+    ).rejects.toThrow("templates contain reps only");
+    const custom = (await rows("user_exercises"))[0];
+    await library({
+      action: "saveExercise",
+      exercise: {
+        id: custom.id,
+        name: "Renamed step-up",
+        description: "Use a low step",
+      },
+      expectedUpdatedAt: custom.updated_at,
+    });
+    await expect(
+      library({
+        action: "saveExercise",
+        exercise: { id: custom.id, name: "Stale" },
+        expectedUpdatedAt: custom.updated_at,
+      }),
+    ).rejects.toThrow("changed elsewhere");
+    await library({
+      action: "saveExercise",
+      exercise: {
+        id: "squat",
+        name: "My squat",
+        description: "Personal override",
+      },
+    });
+    await asUser(bob);
+    await expect(
+      library({
+        action: "saveWorkoutTemplate",
+        template: input,
+        expectedUpdatedAt: latest.updated_at,
+      }),
+    ).rejects.toThrow("Invalid template owner");
+    await expect(
+      library({
+        action: "deleteWorkoutTemplate",
+        id: latest.id,
+        expectedUpdatedAt: latest.updated_at,
+      }),
+    ).rejects.toThrow("changed elsewhere");
+    expect((await rows("user_exercises")).some((e) => e.id === "squat")).toBe(
+      false,
+    );
+    await asUser(alice);
+    const [workout] = workoutEvents(
+      "Editable workout",
+      [defaultExercise("squat", 0, 0), defaultExercise("bench-press", 5, 40)],
+      "2020-02-01T12:00:00Z",
+      "",
+    );
+    const before = (await rows()).length;
+    await mutate({ action: "createEvents", events: [workout] });
+    expect(await rows()).toHaveLength(before + 1);
+    let saved = await get(workout.id);
+    const edit = {
+      ...workout,
+      payload: {
+        name: "Edited workout",
+        exercises: [defaultExercise("squat", 8, 95)],
+      },
+    };
+    await mutate({
+      action: "editEvent",
+      event: edit,
+      expectedUpdatedAt: saved.updated_at,
+    });
+    await expect(
+      mutate({
+        action: "editEvent",
+        event: edit,
+        expectedUpdatedAt: saved.updated_at,
+      }),
+    ).rejects.toThrow("changed elsewhere");
+    saved = await get(workout.id);
+    await mutate({
+      action: "lockEvent",
+      id: workout.id,
+      locked: true,
+      expectedUpdatedAt: saved.updated_at,
+    });
+    saved = await get(workout.id);
+    await expect(
+      mutate({
+        action: "editEvent",
+        event: edit,
+        expectedUpdatedAt: saved.updated_at,
+      }),
+    ).rejects.toThrow("Unlock this event");
+    await mutate({
+      action: "lockEvent",
+      id: workout.id,
+      locked: false,
+      expectedUpdatedAt: saved.updated_at,
+    });
+    saved = await get(workout.id);
+    await mutate({
+      action: "deleteEvent",
+      id: workout.id,
+      expectedUpdatedAt: saved.updated_at,
+    });
+    expect(await rows()).toHaveLength(before);
+    await library({
+      action: "deleteWorkoutTemplate",
+      id: latest.id,
+      expectedUpdatedAt: latest.updated_at,
+    });
+    expect(await rows("workout_templates")).toHaveLength(0);
+    expect(await rows()).toHaveLength(before);
   });
   it("shares global configuration and prevents disabled operators from being configured", async () => {
     await asUser(admin);

@@ -2,6 +2,9 @@ import {
   templateInputSchema,
   customExerciseSchema,
   defaultExercise,
+  groupLegacyWorkouts,
+  withoutWeights,
+  type WorkoutExercise,
 } from "@/lib/domain/workouts";
 import {
   assertMutable,
@@ -125,7 +128,7 @@ export function createDemo(): Snapshot {
       role: "user",
       accountStatus: "approved",
     },
-    events,
+    events: groupLegacyWorkouts(events),
     instances,
     workoutTemplates: [],
     customExercises: [],
@@ -167,7 +170,19 @@ export class DemoRepository implements Repository {
           });
         }
       }
+      state.events = groupLegacyWorkouts(state.events);
       state.workoutTemplates ??= [];
+      state.workoutTemplates = state.workoutTemplates.map((t) => ({
+        ...t,
+        version: 2,
+        exercises: withoutWeights(t.exercises as WorkoutExercise[]),
+        updatedAt: t.updatedAt ?? t.createdAt,
+      }));
+      state.customExercises = (state.customExercises ?? []).map((e) => ({
+        ...e,
+        description: e.description ?? "",
+        updatedAt: e.updatedAt ?? "2000-01-01T00:00:00.000Z",
+      }));
       state.customExercises ??= [];
       for (const instance of state.instances) {
         if ((instance.componentDefinitionId as string) === "exercise_logger") {
@@ -210,30 +225,52 @@ export class DemoRepository implements Repository {
     const now = new Date().toISOString();
     if (m.action === "saveWorkoutTemplate") {
       const input = templateInputSchema.parse(m.template);
+      const old = s.workoutTemplates.find((t) => t.id === input.id);
+      if (old && old.updatedAt !== m.expectedUpdatedAt)
+        throw new Error("Template changed elsewhere. Refresh and try again.");
+      if (!old && m.expectedUpdatedAt)
+        throw new Error("Template changed elsewhere. Refresh and try again.");
       if (
         s.workoutTemplates.some(
           (t) =>
-            t.id === input.id ||
+            t.id !== input.id &&
             t.name.toLowerCase() === input.name.toLowerCase(),
         )
       )
         throw new Error("Invalid template name: choose a new name.");
-      s.workoutTemplates.push({
-        ...input,
-        userId: s.profile.id,
-        createdAt: now,
-      });
-    } else if (m.action === "createExercise") {
+      if (old) Object.assign(old, input, { updatedAt: now });
+      else
+        s.workoutTemplates.push({
+          ...input,
+          userId: s.profile.id,
+          createdAt: now,
+          updatedAt: now,
+        });
+    } else if (m.action === "deleteWorkoutTemplate") {
+      const old = s.workoutTemplates.find((t) => t.id === m.id);
+      if (!old || old.updatedAt !== m.expectedUpdatedAt)
+        throw new Error("Template changed elsewhere. Refresh and try again.");
+      s.workoutTemplates = s.workoutTemplates.filter((t) => t.id !== m.id);
+    } else if (m.action === "createExercise" || m.action === "saveExercise") {
       const input = customExerciseSchema.parse(m.exercise);
+      const old = s.customExercises.find((e) => e.id === input.id);
+      if (
+        old &&
+        (m.action === "createExercise" || old.updatedAt !== m.expectedUpdatedAt)
+      )
+        throw new Error("Exercise changed elsewhere. Refresh and try again.");
+      if (!old && m.action === "saveExercise" && m.expectedUpdatedAt)
+        throw new Error("Exercise changed elsewhere. Refresh and try again.");
       if (
         s.customExercises.some(
           (e) =>
-            e.id === input.id ||
+            e.id !== input.id &&
             e.name.toLowerCase() === input.name.toLowerCase(),
         )
       )
         throw new Error("Invalid exercise name: this exercise already exists.");
-      s.customExercises.push(input);
+      if (old) Object.assign(old, input, { updatedAt: now });
+      else s.customExercises.push({ ...input, updatedAt: now });
     } else if (m.action === "createEvents") {
       const inputs = m.events.map((e) => eventInputSchema.parse(e));
       if (
