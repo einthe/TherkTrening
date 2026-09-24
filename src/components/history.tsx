@@ -1,8 +1,10 @@
 "use client";
+import { isEventLocked } from "@/lib/domain/daily-events";
+import { PainSliders } from "./pain-sliders";
 import { WorkoutLogger } from "./workout-logger";
 import { NumericInput } from "./numeric-input";
 import { exerciseCatalog, type CustomExercise } from "@/lib/domain/workouts";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   Search,
   LockKeyhole,
@@ -15,6 +17,8 @@ import {
 } from "lucide-react";
 import {
   describeEvent,
+  eventSearchText,
+  label,
   eventInputSchema,
   eventNames,
   eventTypes,
@@ -46,7 +50,7 @@ export function EventHistory({
         (!to ||
           Date.parse(e.occurredAt) <=
             new Date(`${to}T23:59:59.999`).getTime()) &&
-        describeEvent(e).toLowerCase().includes(search.toLowerCase()),
+        eventSearchText(e).toLowerCase().includes(search.toLowerCase()),
     )
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
   return (
@@ -139,14 +143,14 @@ export function EventHistory({
                   </td>
                   <td>
                     <span
-                      className={`status-tag ${e.isLocked ? "locked" : ""}`}
+                      className={`status-tag ${isEventLocked(e) ? "locked" : ""}`}
                     >
-                      {e.isLocked ? (
+                      {isEventLocked(e) ? (
                         <LockKeyhole size={11} />
                       ) : (
                         <span className="event-dot" />
                       )}
-                      {e.isLocked ? "Locked" : "Editable"}
+                      {isEventLocked(e) ? "Locked" : "Editable"}
                     </span>
                   </td>
                   <td>
@@ -208,6 +212,7 @@ export function EventDetail({
   mutate: (m: Mutation, message?: string) => Promise<boolean>;
   onClose: () => void;
 }) {
+  const locked = isEventLocked(event);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -227,8 +232,10 @@ export function EventDetail({
   async function action(m: Mutation, message: string) {
     setBusy(true);
     try {
-      if (await mutate(m, message)) onClose();
-      else
+      if (await mutate(m, message)) {
+        setError("");
+        if (m.action !== "lockEvent" || m.locked) onClose();
+      } else
         setError(
           "This change could not be saved. The event may have changed elsewhere. Close and reload before trying again.",
         );
@@ -281,6 +288,14 @@ export function EventDetail({
   const workout =
     event.eventType === "workout"
       ? payloadSchemas.workout.safeParse(event.payload)
+      : null;
+  const pain =
+    event.eventType === "pain_measurement"
+      ? payloadSchemas.pain_measurement.safeParse(payload)
+      : null;
+  const recordedPain =
+    event.eventType === "pain_measurement"
+      ? payloadSchemas.pain_measurement.safeParse(event.payload)
       : null;
   const catalog = exerciseCatalog(customExercises, events);
   const sets = payload.sets as { reps: number; weightKg: number }[] | undefined;
@@ -349,29 +364,36 @@ export function EventDetail({
                 />
               </label>
             ))}
+          {pain?.success && "readings" in pain.data && (
+            <PainSliders
+              readings={pain.data.readings}
+              disabled={busy}
+              onChange={(readings) => field("readings", readings)}
+            />
+          )}
           {"painLevel" in payload && (
             <label>
               Pain level (0–10)
-              <input
+              <NumericInput
                 type="number"
                 min="0"
                 max="10"
                 step="0.1"
                 required
                 value={Number(payload.painLevel)}
-                onChange={(e) => field("painLevel", Number(e.target.value))}
+                onValueChange={(value) => field("painLevel", value)}
               />
             </label>
           )}
           {"value" in payload && (
             <label>
               Value
-              <input
+              <NumericInput
                 type="number"
                 step="any"
                 required
                 value={Number(payload.value)}
-                onChange={(e) => field("value", Number(e.target.value))}
+                onValueChange={(value) => field("value", value)}
               />
             </label>
           )}
@@ -519,7 +541,7 @@ export function EventDetail({
               <dd>{new Date(event.createdAt).toLocaleString()}</dd>
               <dt>Status</dt>
               <dd>
-                {event.isLocked
+                {locked
                   ? "Locked — protected from edits and deletion"
                   : "Unlocked"}
               </dd>
@@ -553,6 +575,19 @@ export function EventDetail({
                 </>
               )}
             </dl>
+            {recordedPain?.success && (
+              <dl>
+                {("readings" in recordedPain.data
+                  ? recordedPain.data.readings
+                  : [recordedPain.data]
+                ).map((reading) => (
+                  <Fragment key={reading.injuryId}>
+                    <dt>{label(reading.injuryId)}</dt>
+                    <dd>{reading.painLevel}/10</dd>
+                  </Fragment>
+                ))}
+              </dl>
+            )}
             {workout?.success && (
               <div className="workout-exercises">
                 {workout.data.exercises?.map((exercise, index) => (
@@ -612,25 +647,25 @@ export function EventDetail({
                     {
                       action: "lockEvent",
                       id: event.id,
-                      locked: !event.isLocked,
+                      locked: !locked,
                       expectedUpdatedAt: event.updatedAt,
                     },
-                    event.isLocked ? "Event unlocked" : "Event locked",
+                    locked ? "Event unlocked" : "Event locked",
                   )
                 }
               >
-                {event.isLocked ? (
+                {locked ? (
                   <LockKeyholeOpen size={15} />
                 ) : (
                   <LockKeyhole size={15} />
                 )}
-                {event.isLocked ? "Unlock event" : "Lock event"}
+                {locked ? "Unlock event" : "Lock event"}
               </button>
               <div>
                 <button
                   className="icon-button danger-text"
                   aria-label="Delete event"
-                  disabled={event.isLocked || busy}
+                  disabled={locked || busy}
                   onClick={() => setDeleting(true)}
                 >
                   <Trash2 size={17} />
@@ -638,7 +673,7 @@ export function EventDetail({
                 <button
                   className="button primary"
                   disabled={
-                    event.isLocked ||
+                    locked ||
                     busy ||
                     event.schemaVersion !== 1 ||
                     !payloadSchemas[event.eventType]?.safeParse(event.payload)

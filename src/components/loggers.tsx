@@ -1,12 +1,27 @@
 "use client";
-import { NumericInput } from "./numeric-input";
+import {
+  latestForDay,
+  localDay,
+  isEventLocked,
+} from "@/lib/domain/daily-events";
+import { useLocalDay } from "./use-local-day";
+import { PainSliders } from "./pain-sliders";
+import { NumericInput, useNumberCaret } from "./numeric-input";
 import { useState } from "react";
-import { Plus, Minus, Check, Clock3, ArrowUpRight } from "lucide-react";
+import {
+  Plus,
+  Minus,
+  Check,
+  ChevronDown,
+  Clock3,
+  ArrowUpRight,
+} from "lucide-react";
 import { componentSchemas, type Instance } from "@/lib/domain/components";
 import { totalSetVolume } from "@/lib/domain/operators";
 import {
   label,
   newEvent,
+  payloadSchemas,
   type EventInput,
   type EventRecord,
 } from "@/lib/domain/events";
@@ -65,36 +80,86 @@ export function When({
     </div>
   );
 }
-export function PainLogger({ instance, save }: Props) {
+export function PainLogger({
+  instance,
+  events,
+  save,
+  update,
+}: Props & {
+  update: (event: EventInput, expectedUpdatedAt: string) => Promise<boolean>;
+}) {
   const config = componentSchemas.pain_logger.parse(instance.config);
   const [levels, setLevels] = useState<Record<string, number>>({});
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState<string | null>(null);
   const [time, setTime] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
+  const day = useLocalDay();
+  const today = latestForDay(events, "pain_measurement", day);
+  const activeToday = !time || localDay(time) === day ? today : undefined;
+  const completed =
+    activeToday && isEventLocked(activeToday) ? activeToday : undefined;
+  const recorded = activeToday
+    ? payloadSchemas.pain_measurement.safeParse(activeToday.payload)
+    : null;
+  const savedReadings = recorded?.success
+    ? "readings" in recorded.data
+      ? recorded.data.readings
+      : [recorded.data]
+    : [];
+  const targets = [
+    ...new Set([...savedReadings.map((r) => r.injuryId), ...config.targets]),
+  ];
+  const readings = completed
+    ? savedReadings
+    : targets.map((injuryId) => ({
+        injuryId,
+        painLevel:
+          levels[injuryId] ??
+          savedReadings.find((r) => r.injuryId === injuryId)?.painLevel ??
+          3,
+      }));
+  const displayedNotes = completed
+    ? (completed.notes ?? "")
+    : (notes ?? activeToday?.notes ?? "");
+  const [formEpoch, setFormEpoch] = useState(0);
+  const [expanded, setExpanded] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (busy || completed) return;
     setBusy(true);
     setError("");
-    const batchId = config.targets.length > 1 ? crypto.randomUUID() : null;
     try {
-      const ok = await save(
-        config.targets.map((injuryId) =>
-          newEvent(
-            "pain_measurement",
-            { injuryId, painLevel: levels[injuryId] ?? 3 },
-            {
-              notes: config.showNotes ? notes || null : null,
-              occurredAt: (time ? new Date(time) : new Date()).toISOString(),
-              batchId,
-            },
-          ),
-        ),
+      const occurredAt = time
+        ? new Date(time).toISOString()
+        : (activeToday?.occurredAt ?? new Date().toISOString());
+      const input = newEvent(
+        "pain_measurement",
+        { readings },
+        {
+          ...(activeToday
+            ? {
+                id: activeToday.id,
+                startedAt: activeToday.startedAt,
+                endedAt: activeToday.endedAt,
+                batchId: activeToday.batchId,
+              }
+            : {}),
+          notes: config.showNotes
+            ? displayedNotes || null
+            : (activeToday?.notes ?? null),
+          occurredAt,
+        },
       );
+      const ok = activeToday
+        ? await update(input, activeToday.updatedAt)
+        : await save([input]);
       if (ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2500);
+        setExpanded(false);
+        setLevels({});
+        setNotes(null);
+        setTime("");
+        setFormEpoch((n) => n + 1);
       }
     } catch (e) {
       setError(
@@ -105,76 +170,89 @@ export function PainLogger({ instance, save }: Props) {
     }
   }
   return (
-    <form onSubmit={submit} className="logger">
-      {config.targets.map((target) => (
-        <div className="pain-target" key={target}>
-          <div className="pain-value">
-            <span>
-              {config.targets.length > 1 ? label(target) : "Pain level"}
+    <form onSubmit={submit} className="logger pain-logger">
+      {completed && (
+        <button
+          type="button"
+          className="daily-complete pain-complete-toggle"
+          aria-expanded={expanded}
+          aria-controls={`pain-details-${instance.id}`}
+          aria-label={
+            expanded ? "Collapse pain check-in" : "Expand pain check-in"
+          }
+          onClick={() => setExpanded(!expanded)}
+        >
+          <Check size={18} />
+          <span>
+            <strong>Checked in today</strong>
+            <span className="daily-complete-hint">
+              Saved for today. Unlock in Event history to make corrections.
             </span>
-            <div>
-              <strong>{levels[target] ?? 3}</strong>
-              <span> / 10</span>
-            </div>
-          </div>
-          <input
-            className="pain-slider"
-            style={
-              {
-                "--progress": `${(levels[target] ?? 3) * 10}%`,
-              } as React.CSSProperties
-            }
-            aria-label={`${label(target)} pain level`}
-            aria-valuetext={`${levels[target] ?? 3} out of 10`}
-            type="range"
-            min="0"
-            max="10"
-            step="1"
-            value={levels[target] ?? 3}
-            onChange={(e) => {
-              setLevels({ ...levels, [target]: Number(e.target.value) });
-              setSaved(false);
+          </span>
+          <ChevronDown size={18} className={expanded ? "expanded" : ""} />
+        </button>
+      )}
+      <div
+        id={`pain-details-${instance.id}`}
+        hidden={Boolean(completed) && !expanded}
+      >
+        <PainSliders
+          readings={readings}
+          disabled={busy || Boolean(completed)}
+          onChange={(readings) => {
+            setLevels(
+              Object.fromEntries(
+                readings.map((r) => [r.injuryId, r.painLevel]),
+              ),
+            );
+          }}
+        />
+        {config.showNotes && (
+          <label>
+            Notes <span className="muted">(optional)</span>
+            <textarea
+              value={displayedNotes}
+              disabled={busy || Boolean(completed)}
+              maxLength={4000}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+            />
+          </label>
+        )}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="logger-footer">
+          <When
+            key={formEpoch}
+            value={time}
+            onChange={(value) => {
+              setTime(value);
+              setError("");
             }}
           />
-          <div className="range-labels">
-            <span>0 · No pain</span>
-            <span>10 · Severe</span>
-          </div>
+          <button
+            className="button primary"
+            disabled={busy || Boolean(completed)}
+          >
+            {completed ? <Check size={16} /> : <Plus size={16} />}{" "}
+            {busy
+              ? "Saving…"
+              : completed
+                ? "Done for today"
+                : activeToday
+                  ? "Save changes"
+                  : "Save check-in"}
+          </button>
         </div>
-      ))}
-      {config.showNotes && (
-        <label>
-          Notes <span className="muted">(optional)</span>
-          <textarea
-            value={notes}
-            maxLength={4000}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-          />
-        </label>
-      )}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-      <div className="logger-footer">
-        <When value={time} onChange={setTime} />
-        <button className="button primary" disabled={busy}>
-          {saved ? <Check size={16} /> : <Plus size={16} />}{" "}
-          {busy
-            ? "Saving…"
-            : saved
-              ? "Saved"
-              : config.targets.length > 1
-                ? "Save all"
-                : "Save check-in"}
-        </button>
       </div>
     </form>
   );
 }
 export function OtherLogger({ instance, save }: Props) {
+  const numberCaret = useNumberCaret();
   const session = instance.componentDefinitionId === "session_logger";
   const config = session
     ? componentSchemas.session_logger.parse(instance.config)
@@ -250,6 +328,15 @@ export function OtherLogger({ instance, save }: Props) {
             required
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            onFocus={(e) => {
+              if (value !== "" && Number(value) === 0) setValue("");
+              numberCaret.onFocus(e.currentTarget);
+            }}
+            onPointerDown={numberCaret.onPointerDown}
+            onPointerUp={numberCaret.onPointerUp}
+            onBlur={() => {
+              if (value === "") setValue("0");
+            }}
           />
         </label>
       )}

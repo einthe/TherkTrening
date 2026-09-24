@@ -34,8 +34,13 @@ export type Mutation =
       expectedUpdatedAt?: string;
     }
   | { action: "createExercise"; exercise: CustomExercise }
-  | { action: "createEvents"; events: EventInput[] }
-  | { action: "editEvent"; event: EventInput; expectedUpdatedAt: string }
+  | { action: "createEvents"; events: EventInput[]; timeZone?: string }
+  | {
+      action: "editEvent";
+      event: EventInput;
+      expectedUpdatedAt: string;
+      timeZone?: string;
+    }
   | { action: "deleteEvent"; id: string; expectedUpdatedAt: string }
   | {
       action: "lockEvent";
@@ -47,6 +52,7 @@ export type Mutation =
       action: "saveInstance";
       instance: InstanceInput;
       expectedUpdatedAt?: string;
+      timeZone?: string;
     }
   | { action: "removeInstance"; id: string }
   | { action: "reorder"; ids: string[] };
@@ -56,7 +62,10 @@ export interface Repository {
 }
 export class HttpRepository implements Repository {
   async load() {
-    const response = await fetch("/api/data", { cache: "no-store" });
+    const response = await fetch(
+      `/api/data?timeZone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`,
+      { cache: "no-store" },
+    );
     const body = await response.json().catch(() => ({
       error: "The server could not complete the request. Please try again.",
     }));
@@ -68,7 +77,16 @@ export class HttpRepository implements Repository {
     const response = await fetch("/api/data", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(mutation),
+      body: JSON.stringify(
+        mutation.action === "createEvents" ||
+          mutation.action === "editEvent" ||
+          mutation.action === "saveInstance"
+          ? {
+              ...mutation,
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            }
+          : mutation,
+      ),
     });
     if (!response.ok) {
       const body = await response

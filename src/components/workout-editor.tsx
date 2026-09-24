@@ -29,11 +29,13 @@ export function WorkoutEditor({
   onChange,
   catalog,
   template = false,
+  prepareExercise = (exercise) => exercise,
 }: {
   exercises: DraftExercise[];
   onChange: (exercises: DraftExercise[]) => void;
   catalog: CustomExercise[];
   template?: boolean;
+  prepareExercise?: (exercise: WorkoutExercise) => WorkoutExercise;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const [choice, setChoice] = useState(catalog[0]?.id ?? "squat");
@@ -158,7 +160,7 @@ export function WorkoutEditor({
           disabled={exercises.length >= 1000}
           onClick={() => {
             const exercise = {
-              ...defaultExercise(choice),
+              ...prepareExercise(defaultExercise(choice)),
               key: crypto.randomUUID(),
             };
             onChange([...exercises, exercise]);

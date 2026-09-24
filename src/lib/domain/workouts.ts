@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   newEvent,
+  payloadSchemas,
   workoutExerciseSchema,
   type EventInput,
   type EventRecord,
@@ -74,6 +75,57 @@ export function defaultExercise(
     exerciseId,
     sets: Array.from({ length: 3 }, () => ({ reps, weightKg })),
   };
+}
+export function withPreviousWeights(
+  exercises: WorkoutExercise[],
+  events: EventRecord[],
+  before = new Date().toISOString(),
+  excludeEventId?: string,
+): WorkoutExercise[] {
+  const latest = new Map<
+    string,
+    { time: number; sets: WorkoutExercise["sets"] }
+  >();
+  for (const event of [...events].sort(
+    (a, b) =>
+      a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+  )) {
+    if (event.schemaVersion !== 1 || event.id === excludeEventId) continue;
+    const parsed =
+      event.eventType === "workout"
+        ? payloadSchemas.workout.safeParse(event.payload)
+        : event.eventType === "exercise"
+          ? payloadSchemas.exercise.safeParse(event.payload)
+          : null;
+    if (!parsed?.success) continue;
+    const entries =
+      "exerciseId" in parsed.data
+        ? [parsed.data]
+        : (parsed.data.exercises ?? []);
+    for (const exercise of entries) {
+      const time = Date.parse(
+        "occurredAt" in exercise && typeof exercise.occurredAt === "string"
+          ? exercise.occurredAt
+          : event.occurredAt,
+      );
+      if (!Number.isFinite(time) || time >= Date.parse(before)) continue;
+      const previous = latest.get(exercise.exerciseId);
+      if (!previous || time >= previous.time)
+        latest.set(exercise.exerciseId, { time, sets: exercise.sets });
+    }
+  }
+  return exercises.map((exercise) => {
+    const previous = latest.get(exercise.exerciseId)?.sets;
+    return {
+      ...exercise,
+      sets: exercise.sets.map((set, index) => ({
+        ...set,
+        weightKg:
+          previous?.[Math.min(index, previous.length - 1)]?.weightKg ??
+          set.weightKg,
+      })),
+    };
+  });
 }
 export function workoutEvents(
   name: string,

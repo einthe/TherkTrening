@@ -29,6 +29,15 @@ async function mutate(m: unknown) {
     JSON.stringify(m),
   ]);
 }
+async function unlock(id: string) {
+  const current = await get(id);
+  await mutate({
+    action: "lockEvent",
+    id,
+    locked: false,
+    expectedUpdatedAt: current.updated_at,
+  });
+}
 async function rows(table = "events") {
   return (
     await db.query<Record<string, unknown>>(`select * from public.${table}`)
@@ -271,8 +280,10 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
   it("enforces locking, separate unlocking, stale writes, and deletion", async () => {
     await asUser(alice);
     const event = newEvent("pain_measurement", {
-      injuryId: "left-knee",
-      painLevel: 3,
+      readings: [
+        { injuryId: "left-knee", painLevel: 3 },
+        { injuryId: "right-shoulder", painLevel: 7 },
+      ],
     });
     await mutate({ action: "createEvents", events: [event] });
     let current = await get(event.id);
@@ -289,7 +300,12 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
         action: "editEvent",
         event: {
           ...event,
-          payload: { injuryId: "left-knee", painLevel: 4 },
+          payload: {
+            readings: [
+              { injuryId: "left-knee", painLevel: 4 },
+              { injuryId: "right-shoulder", painLevel: 2 },
+            ],
+          },
           isLocked: false,
         },
         expectedUpdatedAt: current.updated_at,
@@ -321,6 +337,8 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
       event: { ...event, notes: "Updated" },
       expectedUpdatedAt: current.updated_at,
     });
+    expect((await get(event.id)).is_locked).toBe(true);
+    await unlock(event.id);
     current = await get(event.id);
     await mutate({
       action: "deleteEvent",
@@ -576,6 +594,8 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
     const before = (await rows()).length;
     await mutate({ action: "createEvents", events: [workout] });
     expect(await rows()).toHaveLength(before + 1);
+    expect((await get(workout.id)).is_locked).toBe(true);
+    await unlock(workout.id);
     let saved = await get(workout.id);
     const edit = {
       ...workout,
@@ -593,7 +613,9 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
       mutate({
         action: "editEvent",
         event: edit,
-        expectedUpdatedAt: saved.updated_at,
+        expectedUpdatedAt: new Date(
+          Date.parse(saved.updated_at) - 1000,
+        ).toISOString(),
       }),
     ).rejects.toThrow("changed elsewhere");
     saved = await get(workout.id);
@@ -674,5 +696,283 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
         events: [newEvent("workout", { name: "Blocked" })],
       }),
     ).rejects.toThrow("Approved account required");
+  });
+});
+
+describe("grouped pain storage", () => {
+  beforeAll(async () => {
+    await asUser(admin);
+    await db.query("select public.admin_mutate($1)", [
+      JSON.stringify({ action: "status", id: alice, status: "approved" }),
+    ]);
+  });
+  it("stores and edits all readings in a single row, isolated by owner", async () => {
+    await asUser(alice);
+    const before = (await rows()).length;
+    const event = newEvent("pain_measurement", {
+      readings: [
+        { injuryId: "knee", painLevel: 0 },
+        { injuryId: "shoulder", painLevel: 10 },
+      ],
+    });
+    await mutate({ action: "createEvents", events: [event] });
+    expect(await rows()).toHaveLength(before + 1);
+    expect((await rows()).find((r) => r.id === event.id)?.payload).toEqual(
+      event.payload,
+    );
+    expect((await get(event.id)).is_locked).toBe(true);
+    await unlock(event.id);
+    const current = await get(event.id);
+    const updated = {
+      ...event,
+      payload: {
+        readings: [
+          { injuryId: "knee", painLevel: 4 },
+          { injuryId: "shoulder", painLevel: 8 },
+        ],
+      },
+    };
+    await mutate({
+      action: "editEvent",
+      event: updated,
+      expectedUpdatedAt: current.updated_at,
+    });
+    expect((await rows()).find((r) => r.id === event.id)?.payload).toEqual(
+      updated.payload,
+    );
+    await asUser(bob);
+    expect(await get(event.id)).toBeUndefined();
+  });
+  it.each([
+    { readings: [] },
+    { readings: null },
+    { readings: {} },
+    {
+      readings: Array.from({ length: 13 }, (_, i) => ({
+        injuryId: `injury-${i}`,
+        painLevel: 3,
+      })),
+    },
+    {
+      readings: [
+        { injuryId: "knee", painLevel: 3 },
+        { injuryId: "knee", painLevel: 4 },
+      ],
+    },
+    {
+      readings: [
+        { injuryId: "knee", painLevel: 3 },
+        { injuryId: " knee ", painLevel: 4 },
+      ],
+    },
+    { readings: [{ injuryId: "knee", painLevel: 11 }] },
+    { readings: [{ injuryId: "knee", painLevel: -1 }] },
+    { readings: [{ injuryId: "knee", painLevel: "3" }] },
+    { readings: [{ injuryId: "", painLevel: 3 }] },
+    { readings: [null] },
+    { readings: [{ injuryId: "knee", painLevel: 3, extra: true }] },
+    { readings: [{ injuryId: "knee", painLevel: 3 }], extra: true },
+  ])("rejects invalid nested readings atomically: %j", async (payload) => {
+    await asUser(alice);
+    const before = (await rows()).length;
+    await expect(
+      mutate({
+        action: "createEvents",
+        events: [
+          {
+            ...newEvent("pain_measurement", { injuryId: "knee", painLevel: 3 }),
+            payload,
+          },
+        ],
+      }),
+    ).rejects.toThrow(/Invalid pain|Duplicate injury/);
+    expect(await rows()).toHaveLength(before);
+  });
+});
+
+describe("daily event lifecycle", () => {
+  it.each([
+    ["2026-03-29T12:00:00Z", "Europe/Oslo", "2026-03-29T22:00:00.000Z"],
+    ["2026-10-25T12:00:00Z", "Europe/Oslo", "2026-10-25T23:00:00.000Z"],
+    ["2026-03-08T12:00:00Z", "America/New_York", "2026-03-09T04:00:00.000Z"],
+  ])(
+    "uses local midnight including daylight savings: %s in %s",
+    async (date, zone, expected) => {
+      const result = await db.query<{ deadline: Date }>(
+        "select public.workout_lock_time($1::timestamptz,$2) as deadline",
+        [date, zone],
+      );
+      expect(new Date(result.rows[0].deadline).toISOString()).toBe(expected);
+    },
+  );
+  it("keeps today's workout editable, rejects expired writes, and permits explicit unlocking", async () => {
+    await asUser(alice);
+    const event = newEvent("workout", {
+      name: "Today",
+      exercises: [defaultExercise()],
+    });
+    await mutate({
+      action: "createEvents",
+      events: [event],
+      timeZone: "Europe/Oslo",
+    });
+    expect((await get(event.id)).is_locked).toBe(false);
+    await mutate({
+      action: "editEvent",
+      event: { ...event, notes: "Updated today" },
+      expectedUpdatedAt: (await get(event.id)).updated_at,
+      timeZone: "Europe/Oslo",
+    });
+    expect((await get(event.id)).is_locked).toBe(false);
+    await db.exec("reset role");
+    await db.query(
+      "update public.events set auto_lock_at=clock_timestamp()-interval '1 second' where id=$1",
+      [event.id],
+    );
+    await asUser(alice);
+    await expect(
+      mutate({
+        action: "editEvent",
+        event,
+        expectedUpdatedAt: (await get(event.id)).updated_at,
+      }),
+    ).rejects.toThrow("Unlock this event");
+    await expect(
+      mutate({
+        action: "deleteEvent",
+        id: event.id,
+        expectedUpdatedAt: (await get(event.id)).updated_at,
+      }),
+    ).rejects.toThrow("Unlock this event");
+    await asUser(bob);
+    await db.exec("select public.lock_expired_workouts()");
+    await asUser(alice);
+    expect((await get(event.id)).is_locked).toBe(false);
+    await db.exec("select public.lock_expired_workouts()");
+    expect((await get(event.id)).is_locked).toBe(true);
+    await unlock(event.id);
+    await db.exec("select public.lock_expired_workouts()");
+    expect((await get(event.id)).is_locked).toBe(false);
+    await mutate({
+      action: "editEvent",
+      event: { ...event, occurredAt: "2020-01-02T10:00:00Z" },
+      expectedUpdatedAt: (await get(event.id)).updated_at,
+      timeZone: "Europe/Oslo",
+    });
+    expect((await get(event.id)).is_locked).toBe(true);
+  });
+  it("locks pain and backdated workouts in the save transaction", async () => {
+    await asUser(alice);
+    const pain = newEvent("pain_measurement", {
+      readings: [{ injuryId: "knee", painLevel: 3 }],
+    });
+    const workout = newEvent(
+      "workout",
+      { name: "Yesterday" },
+      { occurredAt: "2020-01-01T10:00:00Z" },
+    );
+    await mutate({
+      action: "createEvents",
+      events: [pain, workout],
+      timeZone: "Europe/Oslo",
+    });
+    expect((await get(pain.id)).is_locked).toBe(true);
+    expect((await get(workout.id)).is_locked).toBe(true);
+    const invalid = newEvent("workout", { name: "Bad timezone" });
+    await expect(
+      mutate({
+        action: "createEvents",
+        events: [invalid],
+        timeZone: "invalid/zone",
+      }),
+    ).rejects.toThrow("Invalid time zone");
+    expect(await get(invalid.id)).toBeUndefined();
+  });
+});
+
+describe("adding injuries to today's saved pain check-in", () => {
+  it("atomically saves targets and unlocks only today's own event, retaining readings and time", async () => {
+    await asUser(alice);
+    const instance = makeInstance("pain_logger", 0);
+    instance.config = { targets: ["left-knee"], showNotes: true };
+    await mutate({ action: "saveInstance", instance, timeZone: "Europe/Oslo" });
+    let card = (await rows("user_component_instances")).find(
+      (i) => i.id === instance.id,
+    )!;
+    const pain = newEvent(
+      "pain_measurement",
+      { readings: [{ injuryId: "left-knee", painLevel: 7 }] },
+      { notes: "Keep notes" },
+    );
+    const earlier = newEvent(
+      "pain_measurement",
+      { injuryId: "left-knee", painLevel: 6 },
+      { occurredAt: "2020-01-01T10:00:00Z" },
+    );
+    await mutate({ action: "createEvents", events: [pain, earlier] });
+    await asUser(bob);
+    const other = newEvent("pain_measurement", {
+      injuryId: "left-knee",
+      painLevel: 3,
+    });
+    await mutate({ action: "createEvents", events: [other] });
+    await asUser(alice);
+    const updated = {
+      ...instance,
+      config: { targets: ["left-knee", "right-shoulder"], showNotes: true },
+    };
+    await expect(
+      mutate({
+        action: "saveInstance",
+        instance: updated,
+        expectedUpdatedAt: "2000-01-01T00:00:00Z",
+        timeZone: "Europe/Oslo",
+      }),
+    ).rejects.toThrow("changed elsewhere");
+    expect((await get(pain.id)).is_locked).toBe(true);
+    expect(
+      (await rows("user_component_instances")).find((i) => i.id === instance.id)
+        ?.config,
+    ).toEqual(instance.config);
+    await mutate({
+      action: "saveInstance",
+      instance: updated,
+      expectedUpdatedAt: card.updated_at,
+      timeZone: "Europe/Oslo",
+    });
+    expect((await get(pain.id)).is_locked).toBe(false);
+    expect((await get(earlier.id)).is_locked).toBe(true);
+    const persisted = (await rows()).find((e) => e.id === pain.id)!;
+    expect(persisted.payload).toEqual(pain.payload);
+    expect(persisted.notes).toBe("Keep notes");
+    expect(new Date(persisted.occurred_at as string).toISOString()).toBe(
+      pain.occurredAt,
+    );
+    await mutate({
+      action: "editEvent",
+      event: {
+        ...pain,
+        payload: {
+          readings: [
+            { injuryId: "left-knee", painLevel: 7 },
+            { injuryId: "right-shoulder", painLevel: 4 },
+          ],
+        },
+      },
+      expectedUpdatedAt: (await get(pain.id)).updated_at,
+    });
+    expect((await get(pain.id)).is_locked).toBe(true);
+    card = (await rows("user_component_instances")).find(
+      (i) => i.id === instance.id,
+    )!;
+    await mutate({
+      action: "saveInstance",
+      instance: { ...updated, title: "Renamed check-in" },
+      expectedUpdatedAt: card.updated_at,
+      timeZone: "Europe/Oslo",
+    });
+    expect((await get(pain.id)).is_locked).toBe(true);
+    await asUser(bob);
+    expect((await get(other.id)).is_locked).toBe(true);
   });
 });

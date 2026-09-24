@@ -127,7 +127,17 @@ export function runPipeline(
   allowed = operatorDefinitions.map((o) => o.key),
 ): Point[] {
   const pipeline = pipelineSchema.parse(serialized);
-  let events = [...input];
+  let events = input.flatMap((event) => {
+    if (event.eventType !== "pain_measurement" || event.schemaVersion !== 1)
+      return [event];
+    const parsed = payloadSchemas.pain_measurement.safeParse(event.payload);
+    if (!parsed.success || !("readings" in parsed.data)) return [event];
+    return parsed.data.readings.map((reading, index) => ({
+      ...event,
+      id: `${event.id}:${index}`,
+      payload: reading,
+    }));
+  });
   if (
     pipeline.some(
       (step) => step.key === "filter_type" && step.eventType === "exercise",

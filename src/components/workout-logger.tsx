@@ -1,4 +1,10 @@
 "use client";
+import {
+  latestForDay,
+  localDay,
+  isEventLocked,
+} from "@/lib/domain/daily-events";
+import { useLocalDay } from "./use-local-day";
 import { useState } from "react";
 import { Save } from "lucide-react";
 import { componentSchemas, type Instance } from "@/lib/domain/components";
@@ -11,6 +17,7 @@ import {
 import {
   exerciseCatalog,
   fromTemplate,
+  withPreviousWeights,
   withoutWeights,
   workoutEvents,
   type WorkoutTemplate,
@@ -20,31 +27,52 @@ import {
 import { WorkoutEditor, draftExercises } from "./workout-editor";
 import { When } from "./loggers";
 import { localInput } from "./ui";
-export function WorkoutLogger({
-  instance,
-  events,
-  templates,
-  customExercises,
-  save,
-  saveTemplate,
-  initialEvent,
-  onManageExercises,
-}: {
+type WorkoutLoggerProps = {
   instance?: Instance;
   events: EventRecord[];
   templates: WorkoutTemplate[];
   customExercises: CustomExercise[];
   save: (events: EventInput[]) => Promise<boolean>;
+  update?: (event: EventInput, expectedUpdatedAt: string) => Promise<boolean>;
   saveTemplate?: (template: TemplateInput) => Promise<boolean>;
   initialEvent?: EventRecord;
   onManageExercises?: () => void;
-}) {
+};
+export function WorkoutLogger(props: WorkoutLoggerProps) {
+  const day = useLocalDay();
+  const dailyEvent = !props.initialEvent
+    ? latestForDay(props.events, "workout", day)
+    : undefined;
+  return (
+    <WorkoutForm
+      key={
+        props.initialEvent?.id ??
+        `${day}:${dailyEvent?.id ?? "new"}:${dailyEvent?.updatedAt ?? ""}`
+      }
+      {...props}
+      dailyEvent={dailyEvent}
+      day={day}
+    />
+  );
+}
+function WorkoutForm({
+  instance,
+  events,
+  templates,
+  customExercises,
+  save,
+  update,
+  saveTemplate,
+  initialEvent,
+  onManageExercises,
+  dailyEvent,
+  day,
+}: WorkoutLoggerProps & { dailyEvent?: EventRecord; day: string }) {
+  const source = initialEvent ?? dailyEvent;
   const config = instance
     ? componentSchemas.workout_logger.parse(instance.config)
     : { exercises: [], showNotes: true };
-  const initial = initialEvent
-    ? payloadSchemas.workout.parse(initialEvent.payload)
-    : null;
+  const initial = source ? payloadSchemas.workout.parse(source.payload) : null;
   const [exercises, setExercises] = useState(() =>
     draftExercises(initial?.exercises ?? config.exercises),
   );
@@ -54,13 +82,18 @@ export function WorkoutLogger({
   const [dirty, setDirty] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
-  const [notes, setNotes] = useState(initialEvent?.notes ?? "");
-  const [time, setTime] = useState(
-    initialEvent ? localInput(initialEvent.occurredAt) : "",
-  );
+  const [notes, setNotes] = useState(source?.notes ?? "");
+  const [time, setTime] = useState(source ? localInput(source.occurredAt) : "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [formEpoch, setFormEpoch] = useState(0);
+  const updatingToday = Boolean(
+    dailyEvent && (!time || localDay(time) === day),
+  );
+  const locked = Boolean(
+    source && isEventLocked(source) && (initialEvent || updatingToday),
+  );
   const catalog = exerciseCatalog(customExercises, events);
   function changed() {
     setDirty(true);
@@ -71,14 +104,18 @@ export function WorkoutLogger({
     const template = templates.find((t) => t.id === id);
     setExercises(
       draftExercises(
-        template ? fromTemplate(template.exercises) : config.exercises,
+        withPreviousWeights(
+          template ? fromTemplate(template.exercises) : config.exercises,
+          events,
+          time ? new Date(time).toISOString() : new Date().toISOString(),
+          source?.id,
+        ),
       ),
     );
     setName(template?.name ?? "Workout");
     setSelectedTemplate(id);
     setPendingTemplate(null);
     setNotes("");
-    setTime("");
     setDirty(false);
     setSaved(false);
     setError("");
@@ -91,37 +128,51 @@ export function WorkoutLogger({
     });
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (busy || saved) return;
+    if (busy || saved || locked) return;
     setBusy(true);
     setError("");
     try {
       const occurredAt =
-        initialEvent && time === localInput(initialEvent.occurredAt)
-          ? initialEvent.occurredAt
+        source && time === localInput(source.occurredAt)
+          ? source.occurredAt
           : (time ? new Date(time) : new Date()).toISOString();
+      const target =
+        initialEvent ?? (localDay(occurredAt) === day ? dailyEvent : undefined);
       const entries = values().map((e) =>
-        initialEvent && occurredAt !== initialEvent.occurredAt
-          ? { ...e, occurredAt }
-          : e,
+        source && occurredAt !== source.occurredAt ? { ...e, occurredAt } : e,
       );
       let records = workoutEvents(
         name,
         entries,
         occurredAt,
-        config.showNotes ? notes : "",
+        config.showNotes ? notes : (source?.notes ?? ""),
       );
-      if (initialEvent)
+      if (target)
         records = [
           newEvent("workout", records[0].payload, {
             ...records[0],
-            id: initialEvent.id,
-            startedAt: initialEvent.startedAt,
-            endedAt: initialEvent.endedAt,
-            batchId: initialEvent.batchId,
+            id: target.id,
+            startedAt: target.startedAt,
+            endedAt: target.endedAt,
+            batchId: target.batchId,
           }),
         ];
-      if (await save(records)) {
-        setSaved(true);
+      const ok =
+        !initialEvent && target
+          ? await update?.(records[0], target.updatedAt)
+          : await save(records);
+      if (ok) {
+        if (!initialEvent && localDay(occurredAt) !== day) {
+          setExercises(draftExercises(initial?.exercises ?? config.exercises));
+          setName(initial?.name ?? "Workout");
+          setNotes(source?.notes ?? "");
+          setTime(source ? localInput(source.occurredAt) : "");
+          setSelectedTemplate("");
+          setPendingTemplate(null);
+          setSavingTemplate(false);
+          setSaved(false);
+          setFormEpoch((n) => n + 1);
+        } else setSaved(true);
         setDirty(false);
       } else
         setError(
@@ -157,7 +208,24 @@ export function WorkoutLogger({
   }
   return (
     <form className="logger workout-logger" onSubmit={submit} noValidate>
-      <fieldset disabled={busy} className="workout-fields">
+      {dailyEvent && updatingToday && (
+        <div className="daily-complete">
+          <Save size={18} />
+          <div>
+            <strong>
+              {locked
+                ? "Today's workout is locked"
+                : "Today's workout is saved"}
+            </strong>
+            <p>
+              {locked
+                ? "Unlock in Event history to make corrections."
+                : "Changes update this workout. It locks when the day ends."}
+            </p>
+          </div>
+        </div>
+      )}
+      <fieldset disabled={busy || locked} className="workout-fields">
         {!initialEvent && (
           <label>
             Saved workouts
@@ -218,6 +286,14 @@ export function WorkoutLogger({
             changed();
           }}
           catalog={catalog}
+          prepareExercise={(exercise) =>
+            withPreviousWeights(
+              [exercise],
+              events,
+              time ? new Date(time).toISOString() : new Date().toISOString(),
+              source?.id,
+            )[0]
+          }
         />
         {onManageExercises && (
           <button
@@ -244,6 +320,7 @@ export function WorkoutLogger({
         )}
         <div className="logger-footer">
           <When
+            key={formEpoch}
             value={time}
             onChange={(value) => {
               setTime(value);
@@ -259,20 +336,11 @@ export function WorkoutLogger({
               ? "Saving…"
               : saved
                 ? "Saved"
-                : initialEvent
+                : initialEvent || updatingToday
                   ? "Save changes"
                   : "Save workout"}
           </button>
         </div>
-        {saved && !initialEvent && (
-          <button
-            type="button"
-            className="text-button"
-            onClick={() => loadTemplate(selectedTemplate)}
-          >
-            Start another workout
-          </button>
-        )}
         {saveTemplate && (
           <button
             type="button"

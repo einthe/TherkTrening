@@ -37,12 +37,14 @@ export const mutationSchema = z.discriminatedUnion("action", [
   z
     .object({
       action: z.literal("createEvents"),
+      timeZone: z.string().min(1).max(100).optional(),
       events: z.array(eventInputSchema).min(1).max(100),
     })
     .strict(),
   z
     .object({
       action: z.literal("editEvent"),
+      timeZone: z.string().min(1).max(100).optional(),
       event: eventInputSchema,
       expectedUpdatedAt: z.string().min(1),
     })
@@ -65,6 +67,7 @@ export const mutationSchema = z.discriminatedUnion("action", [
   z
     .object({
       action: z.literal("saveInstance"),
+      timeZone: z.string().min(1).max(100).optional(),
       instance: instanceInputSchema,
       expectedUpdatedAt: z.string().optional(),
     })
@@ -94,6 +97,7 @@ export function eventFromRow(r: Record<string, unknown>): EventRecord {
     payload: r.payload,
     notes: r.notes,
     isLocked: r.is_locked,
+    autoLockAt: r.auto_lock_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   } as EventRecord;

@@ -23,6 +23,7 @@ import {
   Menu,
 } from "lucide-react";
 import { Brand } from "./auth";
+import { useLocalDay } from "./use-local-day";
 import { WorkoutLogger } from "./workout-logger";
 import { PaletteSelector } from "./palette-selector";
 import {
@@ -58,6 +59,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     () => (demo ? new DemoRepository() : new HttpRepository()),
     [demo],
   );
+  const day = useLocalDay();
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [page, setPage] = useState<Page>("dashboard");
   const [browser, setBrowser] = useState(false);
@@ -91,7 +93,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     return () => {
       active = false;
     };
-  }, [repository]);
+  }, [repository, day]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), toast.error ? 9000 : 4000);
@@ -173,11 +175,28 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
         </div>
       );
     if (i.componentDefinitionId === "pain_logger")
-      return <PainLogger {...props} />;
+      return (
+        <PainLogger
+          key={day}
+          {...props}
+          update={(event, expectedUpdatedAt) =>
+            mutate(
+              { action: "editEvent", event, expectedUpdatedAt },
+              "Pain check-in updated",
+            )
+          }
+        />
+      );
     if (i.componentDefinitionId === "workout_logger")
       return (
         <WorkoutLogger
           {...props}
+          update={(event, expectedUpdatedAt) =>
+            mutate(
+              { action: "editEvent", event, expectedUpdatedAt },
+              "Workout updated",
+            )
+          }
           templates={snapshot!.workoutTemplates}
           customExercises={snapshot!.customExercises}
           saveTemplate={(template) =>
@@ -411,7 +430,14 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                                 </div>
                               </div>
                             )}
-                            <CardBoundary key={i.updatedAt}>
+                            <CardBoundary
+                              resetKey={i.updatedAt}
+                              key={
+                                i.componentDefinitionId === "pain_logger"
+                                  ? i.id
+                                  : i.updatedAt
+                              }
+                            >
                               <DeferredCard render={() => renderComponent(i)} />
                             </CardBoundary>
                           </section>
@@ -565,7 +591,13 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
           onClose={() => setBrowser(false)}
           onSelect={(key) => {
             setBrowser(false);
-            setSettings({ key });
+            const existing =
+              key === "pain_logger"
+                ? (instances.find(
+                    (i) => i.componentDefinitionId === key && i.enabled,
+                  ) ?? instances.find((i) => i.componentDefinitionId === key))
+                : undefined;
+            setSettings({ key, existing });
           }}
         />
       )}
@@ -591,7 +623,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       {selected && snapshot && (
         <EventDetail
           key={selected.id}
-          event={selected}
+          event={snapshot.events.find((e) => e.id === selected.id) ?? selected}
           events={snapshot.events}
           customExercises={snapshot.customExercises}
           mutate={mutate}

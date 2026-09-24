@@ -18,16 +18,16 @@ test("dashboard controls stay on Components and the weekly summary is optional a
     page.getByRole("button", { name: "Add component", exact: true }),
   ).toHaveCount(0);
   await expect(summary.locator(".overview-stat > strong")).toHaveText([
+    "03",
     "04",
-    "05",
-    "05 / 7",
+    "04 / 7",
   ]);
   await page
     .getByRole("button", { name: "Save check-in", exact: true })
     .click();
   await expect(summary.locator(".overview-stat > strong")).toHaveText([
-    "04",
-    "06",
+    "03",
+    "05",
     "05 / 7",
   ]);
 
@@ -49,7 +49,7 @@ test("dashboard controls stay on Components and the weekly summary is optional a
   await expect(summary).toHaveCount(0);
   await page.reload();
   await expect(
-    page.getByRole("button", { name: "Save check-in", exact: true }),
+    page.getByRole("button", { name: "Expand pain check-in", exact: true }),
   ).toBeVisible();
   await expect(summary).toHaveCount(0);
 
@@ -95,7 +95,7 @@ test("dashboard controls stay on Components and the weekly summary is optional a
   });
   await page.reload();
   await expect(
-    page.getByRole("button", { name: "Save check-in", exact: true }),
+    page.getByRole("button", { name: "Expand pain check-in", exact: true }),
   ).toBeVisible();
   await expect(summary).toHaveCount(0);
   await page.getByRole("button", { name: "Components", exact: true }).click();
@@ -112,8 +112,8 @@ test("dashboard controls stay on Components and the weekly summary is optional a
   await expect(row).toBeVisible();
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   await expect(summary.locator(".overview-stat > strong")).toHaveText([
-    "04",
-    "06",
+    "03",
+    "05",
     "05 / 7",
   ]);
 });

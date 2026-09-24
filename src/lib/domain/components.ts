@@ -98,7 +98,8 @@ export const componentDefinitions = [
     key: "pain_logger",
     name: "Pain check-in",
     kind: "logger",
-    description: "A quick check-in for one or more joints or injuries.",
+    description:
+      "Track injuries and body parts together, with a slider for each.",
     icon: "heart",
     supportedEventTypes: ["pain_measurement"],
     capabilities: { canCreateEvents: true, canCreateMultipleEvents: true },

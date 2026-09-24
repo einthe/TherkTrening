@@ -52,12 +52,17 @@ export function Modal({
   );
 }
 export class CardBoundary extends Component<
-  { children: ReactNode },
+  { children: ReactNode; resetKey?: string },
   { error: boolean }
 > {
   state = { error: false };
   static getDerivedStateFromError() {
     return { error: true };
+  }
+  componentDidUpdate(previous: { resetKey?: string }) {
+    if (this.state.error && previous.resetKey !== this.props.resetKey) {
+      this.setState({ error: false });
+    }
   }
   render() {
     return this.state.error ? (

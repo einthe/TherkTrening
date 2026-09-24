@@ -24,10 +24,25 @@ export const workoutExerciseSchema = exercisePayloadSchema
     legacy: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
+export const painReadingSchema = z
+  .object({ injuryId: identifier, painLevel: z.number().min(0).max(10) })
+  .strict();
+export type PainReading = z.infer<typeof painReadingSchema>;
+export const painCheckInSchema = z
+  .object({
+    readings: z
+      .array(painReadingSchema)
+      .min(1)
+      .max(12)
+      .refine(
+        (readings) =>
+          new Set(readings.map((r) => r.injuryId)).size === readings.length,
+        "Each injury can appear only once in a check-in.",
+      ),
+  })
+  .strict();
 export const payloadSchemas = {
-  pain_measurement: z
-    .object({ injuryId: identifier, painLevel: z.number().min(0).max(10) })
-    .strict(),
+  pain_measurement: z.union([painReadingSchema, painCheckInSchema]),
   workout: z
     .object({
       name: z.string().trim().min(1).max(120),
@@ -114,6 +129,7 @@ export type EventRecord = Omit<EventInput, "schemaVersion"> & {
   schemaVersion: number;
   userId: string;
   isLocked: boolean;
+  autoLockAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -177,12 +193,23 @@ export function describeEvent(event: EventRecord): string {
   if (!parsed?.success || event.schemaVersion !== 1)
     return "Unsupported historical data";
   const p = parsed.data;
-  if ("injuryId" in p) return `${label(p.injuryId)} · ${p.painLevel}/10`;
+  if (event.eventType === "pain_measurement")
+    return `${new Date(event.occurredAt).toLocaleDateString("en-GB", { weekday: "long" })} - Pain check-in`;
   if ("exerciseId" in p)
     return `${label(p.exerciseId)} · ${p.sets.length} sets`;
   if ("name" in p) return p.name;
   if ("activityId" in p) return label(p.activityId);
-  return `${label(p.metricId)} · ${p.value} ${p.unit}`;
+  if ("metricId" in p) return `${label(p.metricId)} · ${p.value} ${p.unit}`;
+  return eventNames[event.eventType];
+}
+export function eventSearchText(event: EventRecord): string {
+  const title = describeEvent(event);
+  if (event.eventType !== "pain_measurement") return title;
+  const parsed = payloadSchemas.pain_measurement.safeParse(event.payload);
+  if (!parsed.success) return title;
+  const readings =
+    "readings" in parsed.data ? parsed.data.readings : [parsed.data];
+  return `${title} ${readings.map((r) => `${label(r.injuryId)} ${r.painLevel}/10`).join(" ")}`;
 }
 export function label(value: string) {
   return value.replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());

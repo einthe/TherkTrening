@@ -1,4 +1,6 @@
 "use client";
+import { NumericInput } from "./numeric-input";
+import { PainTargets } from "./pain-targets";
 import { useState } from "react";
 import {
   Heart,
@@ -170,20 +172,19 @@ export function ComponentSettings({
           />
         </label>
         {componentKey === "pain_logger" && (
-          <label>
-            Tracked targets{" "}
-            <span className="muted">(separate with commas)</span>
-            <input
-              value={(config.targets as string[]).join(", ")}
-              onChange={(e) =>
-                field(
-                  "targets",
-                  e.target.value.split(",").map((s) => s.trim()),
-                )
-              }
+          <div className="pain-settings">
+            <p className="micro">
+              Each injury or body part gets its own slider in this card.
+            </p>
+            <PainTargets
+              targets={config.targets as string[]}
+              onChange={async (targets) => {
+                field("targets", targets);
+                return true;
+              }}
+              disabled={busy}
             />
-            <small>For example: left-knee, right-knee, left-ankle</small>
-          </label>
+          </div>
         )}
         {componentKey === "session_logger" && (
           <label>
@@ -328,12 +329,12 @@ export function ComponentSettings({
         {componentKey === "recent_events" && (
           <label>
             Number of events
-            <input
+            <NumericInput
               type="number"
               min="1"
               max="50"
               value={Number(config.limit)}
-              onChange={(e) => field("limit", Number(e.target.value))}
+              onValueChange={(value) => field("limit", value)}
             />
           </label>
         )}

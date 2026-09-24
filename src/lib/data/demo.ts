@@ -1,4 +1,10 @@
 import {
+  isEventLocked,
+  nextLocalMidnight,
+  latestForDay,
+  localDay,
+} from "@/lib/domain/daily-events";
+import {
   templateInputSchema,
   customExerciseSchema,
   defaultExercise,
@@ -10,12 +16,14 @@ import {
   assertMutable,
   label,
   eventInputSchema,
+  payloadSchemas,
   newEvent,
   validateParent,
   type EventRecord,
 } from "@/lib/domain/events";
 import {
   componentDefinitions,
+  componentSchemas,
   instanceInputSchema,
   makeInstance,
 } from "@/lib/domain/components";
@@ -31,14 +39,21 @@ export function createDemo(): Snapshot {
     const e = {
       ...input,
       userId: USER,
-      isLocked: false,
+      isLocked:
+        input.eventType === "pain_measurement" ||
+        (input.eventType === "workout" &&
+          Date.parse(nextLocalMidnight(input.occurredAt)) <= Date.now()),
+      autoLockAt:
+        input.eventType === "workout"
+          ? nextLocalMidnight(input.occurredAt)
+          : null,
       createdAt: now,
       updatedAt: now,
     };
     events.push(e);
     return e;
   };
-  for (let ago = 20; ago >= 0; ago--) {
+  for (let ago = 20; ago >= 1; ago--) {
     const date = new Date();
     date.setUTCDate(date.getUTCDate() - ago);
     date.setUTCHours(8, 0, 0, 0);
@@ -214,6 +229,30 @@ export class DemoRepository implements Repository {
       state.definitions.components = state.definitions.components.filter(
         (d) => d.key !== "exercise_logger",
       );
+      let locked = false;
+      for (const event of state.events) {
+        if (
+          event.autoLockAt === undefined &&
+          (event.eventType === "workout" ||
+            event.eventType === "pain_measurement")
+        ) {
+          event.autoLockAt =
+            event.eventType === "workout"
+              ? nextLocalMidnight(event.occurredAt)
+              : null;
+          event.isLocked =
+            event.isLocked || event.eventType === "pain_measurement";
+          event.updatedAt = new Date().toISOString();
+          locked = true;
+        }
+        if (!event.isLocked && isEventLocked(event)) {
+          event.isLocked = true;
+          event.autoLockAt = null;
+          event.updatedAt = new Date().toISOString();
+          locked = true;
+        }
+      }
+      if (locked) localStorage.setItem(KEY, JSON.stringify(state));
       return state;
     }
     const state = createDemo();
@@ -281,7 +320,12 @@ export class DemoRepository implements Repository {
       const records = inputs.map((e) => ({
         ...e,
         userId: s.profile.id,
-        isLocked: false,
+        isLocked:
+          e.eventType === "pain_measurement" ||
+          (e.eventType === "workout" &&
+            Date.parse(nextLocalMidnight(e.occurredAt)) <= Date.now()),
+        autoLockAt:
+          e.eventType === "workout" ? nextLocalMidnight(e.occurredAt) : null,
         createdAt: now,
         updatedAt: now,
       }));
@@ -304,6 +348,7 @@ export class DemoRepository implements Repository {
             "This event changed elsewhere. Refresh and try again.",
           );
         e.isLocked = m.locked;
+        e.autoLockAt = null;
         e.updatedAt = now;
       } else {
         assertMutable(e, s.profile, m.expectedUpdatedAt);
@@ -318,12 +363,55 @@ export class DemoRepository implements Repository {
           if (input.eventType !== e.eventType)
             throw new Error("Event type cannot be changed.");
           validateParent(input, s.events, s.profile.id);
-          Object.assign(e, input, { updatedAt: now });
+          Object.assign(e, input, {
+            updatedAt: now,
+            isLocked:
+              input.eventType === "pain_measurement" ||
+              (input.eventType === "workout" &&
+                Date.parse(nextLocalMidnight(input.occurredAt)) <= Date.now()),
+            autoLockAt:
+              input.eventType === "workout"
+                ? nextLocalMidnight(input.occurredAt)
+                : null,
+          });
         }
       }
     } else if (m.action === "saveInstance") {
       const input = instanceInputSchema.parse(m.instance);
       const old = s.instances.find((i) => i.id === input.id);
+      if (input.componentDefinitionId === "pain_logger") {
+        const targets = componentSchemas.pain_logger.parse(
+          input.config,
+        ).targets;
+        const previous = old
+          ? componentSchemas.pain_logger.parse(old.config).targets
+          : [];
+        if (targets.some((target) => !previous.includes(target))) {
+          const today = latestForDay(s.events, "pain_measurement", localDay());
+          if (today) {
+            const payload = payloadSchemas.pain_measurement.parse(
+              today.payload,
+            );
+            const readings =
+              "readings" in payload ? payload.readings : [payload];
+            const savedTargets = readings.map((r) => r.injuryId);
+            if (
+              targets.some(
+                (target) =>
+                  !previous.includes(target) && !savedTargets.includes(target),
+              )
+            ) {
+              if (new Set([...savedTargets, ...targets]).size > 12)
+                throw new Error(
+                  "Invalid pain targets: today's check-in can contain at most 12 injuries. Your saved readings are preserved.",
+                );
+              today.isLocked = false;
+              today.autoLockAt = null;
+              today.updatedAt = now;
+            }
+          }
+        }
+      }
       if (old) {
         if (old.updatedAt !== m.expectedUpdatedAt)
           throw new Error(

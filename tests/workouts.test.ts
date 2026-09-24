@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   defaultExercise,
+  withPreviousWeights,
   withoutWeights,
   fromTemplate,
   groupLegacyWorkouts,
@@ -193,5 +194,104 @@ describe("workouts and templates", () => {
     expect((await repo.load()).customExercises).toMatchObject([
       { id: "step-up", name: "Step-up" },
     ]);
+  });
+});
+
+describe("previous exercise weights", () => {
+  const record = (
+    eventType: "exercise" | "workout",
+    payload: unknown,
+    occurredAt: string,
+    createdAt = occurredAt,
+  ): EventRecord => ({
+    ...newEvent(eventType, payload, { occurredAt }),
+    userId: "owner",
+    isLocked: true,
+    createdAt,
+    updatedAt: createdAt,
+  });
+  it("selects by exercise time, handles legacy entries, and keeps draft reps and history unchanged", () => {
+    const old = record(
+      "exercise",
+      defaultExercise("squat", 2, 60),
+      "2020-01-01T10:00:00Z",
+      "2030-01-01T00:00:00Z",
+    );
+    const recent = record(
+      "workout",
+      {
+        name: "Recent",
+        exercises: [
+          {
+            exerciseId: "squat",
+            sets: [
+              { reps: 8, weightKg: 80 },
+              { reps: 6, weightKg: 85 },
+            ],
+          },
+        ],
+      },
+      "2020-01-02T10:00:00Z",
+    );
+    const future = record(
+      "workout",
+      { name: "Future", exercises: [defaultExercise("squat", 1, 100)] },
+      "2020-01-04T10:00:00Z",
+    );
+    const draft = [
+      defaultExercise("squat", 5),
+      defaultExercise("bench-press", 8),
+    ];
+    const events = [future, recent, old];
+    const snapshot = structuredClone(events);
+    expect(withPreviousWeights(draft, events, "2020-01-03T10:00:00Z")).toEqual([
+      {
+        exerciseId: "squat",
+        sets: [
+          { reps: 5, weightKg: 80 },
+          { reps: 5, weightKg: 85 },
+          { reps: 5, weightKg: 85 },
+        ],
+      },
+      defaultExercise("bench-press", 8),
+    ]);
+    expect(events).toEqual(snapshot);
+    expect(draft[0].sets[0].weightKg).toBe(0);
+    expect(
+      withPreviousWeights(draft, events, "2020-01-03T10:00:00Z", recent.id)[0],
+    ).toEqual(defaultExercise("squat", 5, 60));
+  });
+  it("uses migrated exercise dates, preserves zero weights, and skips unsupported or malformed data", () => {
+    const old = record(
+      "exercise",
+      defaultExercise("squat", 3, 90),
+      "2020-01-02T10:00:00Z",
+    );
+    const migrated = record(
+      "workout",
+      {
+        name: "Migrated",
+        exercises: [
+          {
+            ...defaultExercise("squat", 3, 0),
+            occurredAt: "2020-01-03T10:00:00Z",
+          },
+        ],
+      },
+      "2020-01-01T10:00:00Z",
+    );
+    const ignored = {
+      ...old,
+      schemaVersion: 999,
+      occurredAt: "2020-01-04T10:00:00Z",
+    };
+    const invalid = { ...old, payload: { exerciseId: "squat", sets: [] } };
+    expect(
+      withPreviousWeights(
+        [defaultExercise("squat", 5, 80)],
+        [old, migrated, ignored, invalid],
+        "2020-01-05T10:00:00Z",
+      )[0],
+    ).toEqual(defaultExercise("squat", 5, 0));
   });
 });

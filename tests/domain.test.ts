@@ -4,6 +4,7 @@ import {
   assertApproved,
   assertMutable,
   eventInputSchema,
+  describeEvent,
   newEvent,
   validateParent,
   type EventRecord,
@@ -19,6 +20,7 @@ import {
   instanceInputSchema,
   makeInstance,
   volumePipeline,
+  painPipeline,
 } from "@/lib/domain/components";
 const owner = "11111111-1111-4111-8111-111111111111";
 const profile: Profile = {
@@ -331,5 +333,55 @@ describe("authorization and configuration", () => {
         },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("grouped pain check-ins", () => {
+  const readings = [
+    { injuryId: "left-knee", painLevel: 0 },
+    { injuryId: "right-shoulder", painLevel: 10 },
+  ];
+  it("describes one check-in and extracts each target for charts with legacy readings", () => {
+    const checkIn = record(
+      newEvent(
+        "pain_measurement",
+        { readings },
+        { occurredAt: "2026-09-23T10:00:00Z" },
+      ),
+    );
+    const oldReading = record(
+      newEvent(
+        "pain_measurement",
+        { injuryId: "left-knee", painLevel: 4 },
+        { occurredAt: "2026-09-23T11:00:00Z" },
+      ),
+    );
+    expect(describeEvent(checkIn)).toBe("Wednesday - Pain check-in");
+    expect(describeEvent(oldReading)).toBe("Wednesday - Pain check-in");
+    expect(
+      runPipeline([checkIn, oldReading], painPipeline("left-knee")),
+    ).toEqual([{ date: "2026-09-23", value: 2 }]);
+    expect(
+      runPipeline([checkIn, oldReading], painPipeline("right-shoulder")),
+    ).toEqual([{ date: "2026-09-23", value: 10 }]);
+    expect(runPipeline([checkIn], painPipeline("lower-back"))).toEqual([]);
+  });
+  it.each([
+    { readings: [] },
+    {
+      readings: Array.from({ length: 13 }, (_, i) => ({
+        injuryId: `injury-${i}`,
+        painLevel: 3,
+      })),
+    },
+    { readings: [readings[0], readings[0]] },
+    { readings: [{ injuryId: "left-knee", painLevel: 11 }] },
+    { readings: [{ injuryId: "left-knee", painLevel: -1 }] },
+    { readings: [{ injuryId: "left-knee", painLevel: "3" }] },
+    { readings: [{ injuryId: "", painLevel: 3 }] },
+    { readings: [{ injuryId: "left-knee", painLevel: 3, extra: true }] },
+    { readings, injuryId: "left-knee", painLevel: 3 },
+  ])("rejects malformed grouped payload %j", (payload) => {
+    expect(() => newEvent("pain_measurement", payload)).toThrow();
   });
 });

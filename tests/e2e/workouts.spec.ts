@@ -8,6 +8,9 @@ test("invalid collapsed sets and storage failures preserve the workout draft", a
   await card.getByRole("button", { name: /^Squat.*sets/ }).click();
   await card
     .getByRole("spinbutton", { name: "Set 1 reps", exact: true })
+    .focus();
+  await card
+    .getByRole("spinbutton", { name: "Set 1 reps", exact: true })
     .fill("-1");
   await card
     .getByRole("button", { name: "Close exercise", exact: true })
@@ -15,6 +18,9 @@ test("invalid collapsed sets and storage failures preserve the workout draft", a
   await card.getByRole("button", { name: "Save workout", exact: true }).click();
   await expect(card.getByRole("alert")).toBeVisible();
   await card.getByRole("button", { name: /^Squat.*sets/ }).click();
+  await card
+    .getByRole("spinbutton", { name: "Set 1 reps", exact: true })
+    .focus();
   await card
     .getByRole("spinbutton", { name: "Set 1 reps", exact: true })
     .fill("8");
@@ -84,10 +90,12 @@ test("exercise and workout libraries persist edits; templates exclude weights; w
     name: "Set 1 reps",
     exact: true,
   });
+  await reps.focus();
   await reps.fill("");
   await expect(reps).toHaveValue("");
   await reps.press("Tab");
   await expect(reps).toHaveValue("0");
+  await reps.focus();
   await reps.fill("8");
   await expect(dialog.getByRole("spinbutton", { name: /weight/ })).toHaveCount(
     0,
@@ -109,6 +117,9 @@ test("exercise and workout libraries persist edits; templates exclude weights; w
   await dialog.getByRole("button", { name: /^Back squat.*sets/ }).click();
   await dialog
     .getByRole("spinbutton", { name: "Set 2 reps", exact: true })
+    .focus();
+  await dialog
+    .getByRole("spinbutton", { name: "Set 2 reps", exact: true })
     .fill("6");
   await dialog
     .getByRole("button", { name: "Save template", exact: true })
@@ -125,14 +136,17 @@ test("exercise and workout libraries persist edits; templates exclude weights; w
     name: "Set 1 weight",
     exact: true,
   });
-  await expect(weight).toHaveValue("0");
+  await expect(weight).toHaveValue("80");
+  await weight.focus();
   await weight.fill("");
   await expect(weight).toHaveValue("");
+  await weight.focus();
   await weight.fill("80");
   const secondWeight = card.getByRole("spinbutton", {
     name: "Set 2 weight",
     exact: true,
   });
+  await secondWeight.focus();
   await secondWeight.fill("");
   await expect(secondWeight).toHaveValue("");
   await secondWeight.press("Tab");
@@ -141,6 +155,9 @@ test("exercise and workout libraries persist edits; templates exclude weights; w
     .getByRole("button", { name: "Close exercise", exact: true })
     .click();
   await card.getByRole("button", { name: /^Single leg step-up.*sets/ }).click();
+  await card
+    .getByRole("spinbutton", { name: "Set 1 weight", exact: true })
+    .focus();
   await card
     .getByRole("spinbutton", { name: "Set 1 weight", exact: true })
     .fill("10");
@@ -195,6 +212,9 @@ test("exercise and workout libraries persist edits; templates exclude weights; w
   await dialog.getByRole("button", { name: /^Back squat.*sets/ }).click();
   await dialog
     .getByRole("spinbutton", { name: "Set 1 weight", exact: true })
+    .focus();
+  await dialog
+    .getByRole("spinbutton", { name: "Set 1 weight", exact: true })
     .fill("85");
   await dialog
     .getByRole("button", {
@@ -206,6 +226,9 @@ test("exercise and workout libraries persist edits; templates exclude weights; w
   await dialog
     .getByRole("button", { name: "Add exercise", exact: true })
     .click();
+  await dialog
+    .getByRole("spinbutton", { name: "Set 1 weight", exact: true })
+    .focus();
   await dialog
     .getByRole("spinbutton", { name: "Set 1 weight", exact: true })
     .fill("40");
@@ -261,4 +284,94 @@ test("exercise and workout libraries persist edits; templates exclude weights; w
     path: testInfo.outputPath("template-mobile.png"),
     fullPage: true,
   });
+});
+
+test("added exercises load previous set weights and zero fields clear only on focus", async ({
+  page,
+}) => {
+  await page.goto("/demo");
+  const card = page.locator(".workout-logger");
+  await card
+    .getByRole("button", { name: "Remove Squat exercise 1", exact: true })
+    .click();
+  await card.getByLabel("Exercise to add").selectOption("squat");
+  await card.getByRole("button", { name: "Add exercise", exact: true }).click();
+  for (const [index, weight] of [80, 80, 85].entries()) {
+    await expect(
+      card.getByRole("spinbutton", {
+        name: `Set ${index + 1} weight`,
+        exact: true,
+      }),
+    ).toHaveValue(String(weight));
+  }
+  const first = card.getByRole("spinbutton", {
+    name: "Set 1 weight",
+    exact: true,
+  });
+  await first.focus();
+  await expect(first).toHaveValue("80");
+  await card.getByLabel("Exercise to add").selectOption("bench-press");
+  await card.getByRole("button", { name: "Add exercise", exact: true }).click();
+  const bench = card.getByRole("group", {
+    name: "Bench press sets 2",
+    exact: true,
+  });
+  const weight = bench.getByRole("spinbutton", {
+    name: "Set 1 weight",
+    exact: true,
+  });
+  await expect(weight).toHaveValue("0");
+  await weight.focus();
+  await expect(weight).toHaveValue("");
+  await weight.pressSequentially("40");
+  await weight.press("Tab");
+  await expect(weight).toHaveValue("40");
+  const second = bench.getByRole("spinbutton", {
+    name: "Set 2 weight",
+    exact: true,
+  });
+  await second.focus();
+  await expect(second).toHaveValue("");
+  await second.press("Tab");
+  await expect(second).toHaveValue("0");
+  await card.locator(".when").getByRole("button").first().click();
+  await card.getByLabel("Event date and time").fill("2000-01-01T10:00");
+  await card.getByLabel("Exercise to add").selectOption("squat");
+  await card.getByRole("button", { name: "Add exercise", exact: true }).click();
+  await expect(
+    card
+      .getByRole("group", { name: "Squat sets 3", exact: true })
+      .getByRole("spinbutton", { name: "Set 1 weight", exact: true }),
+  ).toHaveValue("0");
+});
+
+test("number-field focus puts the caret after the value for mouse and keyboard", async ({
+  page,
+}) => {
+  await page.goto("/demo");
+  const card = page.locator(".workout-logger");
+  await card.getByRole("button", { name: /^Squat.*sets/ }).click();
+  const reps = card.getByRole("spinbutton", {
+    name: "Set 1 reps",
+    exact: true,
+  });
+  const weight = card.getByRole("spinbutton", {
+    name: "Set 1 weight",
+    exact: true,
+  });
+  await weight.focus();
+  await weight.fill("12");
+  await reps.focus();
+  await weight.click({ position: { x: 6, y: 12 } });
+  await page.keyboard.type("3");
+  await expect(weight).toHaveValue("123");
+  await weight.press("ArrowLeft");
+  await page.keyboard.type("4");
+  await expect(weight).toHaveValue("1243");
+  await weight.focus();
+  await weight.fill("12");
+  await reps.focus();
+  await reps.press("Tab");
+  await page.keyboard.type("3");
+  await expect(weight).toHaveValue("123");
 });

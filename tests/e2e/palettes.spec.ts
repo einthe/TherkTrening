@@ -18,16 +18,33 @@ test("palettes recolor the interface and charts, persist across pages, and prese
     .click();
   await page
     .getByRole("spinbutton", { name: "Set 1 reps", exact: true })
+    .focus();
+  await page
+    .getByRole("spinbutton", { name: "Set 1 reps", exact: true })
     .fill("8");
   const forestBackground = await page
     .locator("body")
     .evaluate((el) => getComputedStyle(el).backgroundColor);
-  for (const palette of ["petrol", "slate", "plum", "forest"]) {
+  for (const palette of [
+    "petrol",
+    "slate",
+    "plum",
+    "black",
+    "amber",
+    "midnight",
+    "forest",
+  ]) {
     await picker.selectOption(palette);
     await expect(page.locator("html")).toHaveAttribute("data-palette", palette);
     await expect(
       page.getByRole("spinbutton", { name: "Set 1 reps", exact: true }),
     ).toHaveValue("8");
+    if (["black", "amber", "midnight"].includes(palette)) {
+      await page.screenshot({
+        path: testInfo.outputPath(`${palette}-desktop.png`),
+        fullPage: true,
+      });
+    }
     if (palette !== "forest") {
       expect(
         await page
@@ -97,7 +114,7 @@ test("unknown preferences fall back to Forest and other tabs follow changes", as
   ).toHaveValue("petrol");
   await other
     .getByRole("combobox", { name: "Color palette" })
-    .selectOption("plum");
-  await expect(picker).toHaveValue("plum");
-  await expect(page.locator("html")).toHaveAttribute("data-palette", "plum");
+    .selectOption("black");
+  await expect(picker).toHaveValue("black");
+  await expect(page.locator("html")).toHaveAttribute("data-palette", "black");
 });

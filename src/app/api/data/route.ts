@@ -6,7 +6,7 @@ import {
   instanceFromRow,
   templateFromRow,
 } from "@/lib/data/server-repository";
-export async function GET() {
+export async function GET(request: Request) {
   const profile = await currentProfile();
   if (profile?.accountStatus !== "approved")
     return NextResponse.json(
@@ -14,6 +14,17 @@ export async function GET() {
       { status: 403 },
     );
   const db = await supabaseServer();
+  const { error: lockError } = await db.rpc("lock_expired_workouts", {
+    zone: new URL(request.url).searchParams.get("timeZone") || "UTC",
+  });
+  if (lockError)
+    return NextResponse.json(
+      {
+        error:
+          "Unable to update daily locks. Apply the latest database migrations and try again.",
+      },
+      { status: 500 },
+    );
   const [
     events,
     instances,

@@ -94,6 +94,102 @@
   --chart-volume: #d2ace5;
   --chart-pain: #a6d7be;
 }
+:root[data-palette="black"] {
+  --bg: #080808;
+  --sidebar: #0e0e0e;
+  --card: #171717;
+  --card-hover: #202020;
+  --line: #333333;
+  --text: #f5f5f5;
+  --muted: #ababab;
+  --accent: #e8e8e8;
+  --accent-dark: #292929;
+  --on-accent: #121212;
+  --text-soft: #d6d6d6;
+  --subtle: #a0a0a0;
+  --input: #101010;
+  --surface-raised: #262626;
+  --border-strong: #545454;
+  --accent-soft: #f0f0f0;
+  --overview-from: #242424;
+  --overview-to: #181818;
+  --auth-glow: #353535;
+  --purple: #c4c4c4;
+  --chart-volume: #e8e8e8;
+  --chart-pain: #9e9e9e;
+}
+:root[data-palette="black"] .card-icon,
+:root[data-palette="black"] .event-icon {
+  color: var(--text-soft);
+  background: var(--surface-raised);
+}
+:root[data-palette="black"] .pain-value strong {
+  color: var(--accent);
+}
+:root[data-palette="black"] .pain-slider {
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--progress),
+    var(--surface-raised) var(--progress)
+  );
+}
+:root[data-palette="black"] .pain-slider::-webkit-slider-thumb {
+  border-color: var(--accent);
+  background: var(--border-strong);
+  box-shadow: 0 0 0 5px #ffffff18;
+}
+:root[data-palette="black"] .pain-slider::-moz-range-thumb {
+  border-color: var(--accent);
+  background: var(--border-strong);
+}
+:root[data-palette="amber"] {
+  --bg: #1a140d;
+  --sidebar: #211a11;
+  --card: #2b2217;
+  --card-hover: #362b1d;
+  --line: #4b3b27;
+  --text: #faf1e4;
+  --muted: #c4b298;
+  --accent: #edbf75;
+  --accent-dark: #45311c;
+  --on-accent: #2e200e;
+  --text-soft: #e7d6bb;
+  --subtle: #b8a589;
+  --input: #20190f;
+  --surface-raised: #3d2f1e;
+  --border-strong: #715938;
+  --accent-soft: #f5d8a6;
+  --overview-from: #3b2d1c;
+  --overview-to: #2d2317;
+  --auth-glow: #694723;
+  --purple: #d7a3ad;
+  --chart-volume: #edbf75;
+  --chart-pain: #8ac9c3;
+}
+:root[data-palette="midnight"] {
+  --bg: #0b1020;
+  --sidebar: #10172b;
+  --card: #171f36;
+  --card-hover: #1e2945;
+  --line: #303e60;
+  --text: #f0f3ff;
+  --muted: #a5b2d0;
+  --accent: #9faeff;
+  --accent-dark: #29355c;
+  --on-accent: #141c3a;
+  --text-soft: #d2daf1;
+  --subtle: #99a8ce;
+  --input: #10182b;
+  --surface-raised: #253152;
+  --border-strong: #4a5d92;
+  --accent-soft: #c9d1ff;
+  --overview-from: #222e50;
+  --overview-to: #19233d;
+  --auth-glow: #354c86;
+  --purple: #c6b0ef;
+  --chart-volume: #9faeff;
+  --chart-pain: #efb6b8;
+}
 * {
   box-sizing: border-box;
 }
@@ -2301,4 +2397,86 @@ tbody tr:hover {
   .library-toolbar p {
     width: 100%;
   }
+}
+.pain-target-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 0;
+}
+.pain-target-editor > .button {
+  align-self: flex-start;
+}
+.pain-target-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pain-target-chips > span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  background: var(--surface-raised);
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+.pain-target-chips .icon-button {
+  width: 28px;
+  height: 28px;
+}
+.pain-settings {
+  margin-bottom: 20px;
+}
+
+.daily-complete {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--accent);
+}
+.daily-complete p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.daily-complete > svg {
+  flex-shrink: 0;
+}
+.pain-slider:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.pain-complete-toggle {
+  width: 100%;
+  margin-bottom: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.pain-complete-toggle[aria-expanded="true"] {
+  margin-bottom: 20px;
+}
+.pain-complete-toggle > span {
+  flex: 1;
+}
+.daily-complete-hint {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.pain-complete-toggle .expanded {
+  transform: rotate(180deg);
+}
+.pain-complete-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
