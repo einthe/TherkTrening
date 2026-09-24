@@ -61,6 +61,7 @@ export type Instance = {
   version: number;
   title: string;
   enabled: boolean;
+  showOnAnalysis: boolean;
   position: number;
   config: unknown;
   createdAt: string;
@@ -231,6 +232,7 @@ export const instanceInputSchema = z
     version: z.literal(1),
     title: z.string().trim().min(1).max(80),
     enabled: z.boolean(),
+    showOnAnalysis: z.boolean().default(false),
     position: z.number().int().min(0).max(10000),
     config: z.unknown(),
   })

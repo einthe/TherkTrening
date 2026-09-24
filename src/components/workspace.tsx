@@ -10,6 +10,7 @@ import {
   Dumbbell,
   NotebookPen,
   LayoutDashboard,
+  ChartNoAxesCombined,
   History,
   PanelsTopLeft,
   Settings2,
@@ -63,6 +64,7 @@ import { CardBoundary } from "./ui";
 
 type Page =
   | "dashboard"
+  | "analysis"
   | "history"
   | "components"
   | "admin"
@@ -199,18 +201,22 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
   const instances = [...(snapshot?.instances ?? [])].sort(
     (a, b) => a.position - b.position,
   );
+  const visibleInstances = instances.filter((i) =>
+    page === "analysis" ? i.showOnAnalysis : i.enabled,
+  );
   async function move(instance: Instance, direction: number) {
     const ids = instances.map((i) => i.id);
     const i = ids.indexOf(instance.id);
     if (i + direction < 0 || i + direction >= ids.length) return;
     [ids[i], ids[i + direction]] = [ids[i + direction], ids[i]];
-    await mutate({ action: "reorder", ids }, "Dashboard order updated");
+    await mutate({ action: "reorder", ids }, "Component order updated");
   }
   const operators =
     snapshot?.definitions.operators.filter((o) => o.active).map((o) => o.key) ??
     [];
   const titles = {
     dashboard: "Dashboard",
+    analysis: "Analysis",
     history: "Event history",
     components: "Components",
     admin: "Administration",
@@ -320,6 +326,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
           {(
             [
               { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+              { key: "analysis", label: "Analysis", icon: ChartNoAxesCombined },
               { key: "history", label: "Event history", icon: History },
               { key: "components", label: "Components", icon: PanelsTopLeft },
               { key: "workouts", label: "Workouts", icon: NotebookPen },
@@ -456,61 +463,59 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             </div>
           ) : (
             <>
-              {page === "dashboard" && (
+              {(page === "dashboard" || page === "analysis") && (
                 <>
                   <div className="dashboard-grid">
-                    {instances
-                      .filter((i) => i.enabled)
-                      .map((i) => {
-                        const def = componentDefinitions.find(
-                          (d) => d.key === i.componentDefinitionId,
-                        );
-                        const Icon = def ? componentIcons[def.icon] : Activity;
-                        return (
-                          <section
-                            className={`card dashboard-card ${i.componentDefinitionId === "graph" ? "graph-card" : ""} ${i.componentDefinitionId === "weekly_summary" ? "summary-card" : ""}`}
-                            key={i.id}
-                          >
-                            {i.componentDefinitionId !== "weekly_summary" && (
-                              <div className="card-heading">
-                                <h2>
-                                  <span
-                                    className={`card-icon ${i.componentDefinitionId}`}
-                                  >
-                                    <Icon size={17} />
-                                  </span>
-                                  {i.title}
-                                </h2>
-                                <div className="card-controls">
-                                  <button
-                                    className="icon-button"
-                                    aria-label={`Settings for ${i.title}`}
-                                    onClick={() =>
-                                      setSettings({
-                                        key: i.componentDefinitionId,
-                                        existing: i,
-                                      })
-                                    }
-                                  >
-                                    <Settings2 size={16} />
-                                  </button>
-                                </div>
+                    {visibleInstances.map((i) => {
+                      const def = componentDefinitions.find(
+                        (d) => d.key === i.componentDefinitionId,
+                      );
+                      const Icon = def ? componentIcons[def.icon] : Activity;
+                      return (
+                        <section
+                          className={`card dashboard-card ${i.componentDefinitionId === "graph" ? "graph-card" : ""} ${i.componentDefinitionId === "weekly_summary" ? "summary-card" : ""}`}
+                          key={i.id}
+                        >
+                          {i.componentDefinitionId !== "weekly_summary" && (
+                            <div className="card-heading">
+                              <h2>
+                                <span
+                                  className={`card-icon ${i.componentDefinitionId}`}
+                                >
+                                  <Icon size={17} />
+                                </span>
+                                {i.title}
+                              </h2>
+                              <div className="card-controls">
+                                <button
+                                  className="icon-button"
+                                  aria-label={`Settings for ${i.title}`}
+                                  onClick={() =>
+                                    setSettings({
+                                      key: i.componentDefinitionId,
+                                      existing: i,
+                                    })
+                                  }
+                                >
+                                  <Settings2 size={16} />
+                                </button>
                               </div>
-                            )}
-                            <CardBoundary
-                              resetKey={i.updatedAt}
-                              key={
-                                i.componentDefinitionId === "pain_logger"
-                                  ? i.id
-                                  : i.updatedAt
-                              }
-                            >
-                              <DeferredCard render={() => renderComponent(i)} />
-                            </CardBoundary>
-                          </section>
-                        );
-                      })}
-                    {!instances.some((i) => i.enabled) && (
+                            </div>
+                          )}
+                          <CardBoundary
+                            resetKey={i.updatedAt}
+                            key={
+                              i.componentDefinitionId === "pain_logger"
+                                ? i.id
+                                : i.updatedAt
+                            }
+                          >
+                            <DeferredCard render={() => renderComponent(i)} />
+                          </CardBoundary>
+                        </section>
+                      );
+                    })}
+                    {!visibleInstances.length && (
                       <button
                         className="add-empty"
                         onClick={() => navigate("components")}
@@ -518,7 +523,11 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                         <Plus size={30} />
                         <h2>No components</h2>
                         <p>
-                          Choose which components to show on your dashboard.
+                          Choose which components to show{" "}
+                          {page === "analysis"
+                            ? "in Analysis"
+                            : "on your dashboard"}
+                          .
                         </p>
                         <span className="button primary">
                           Go to Components <ArrowUpRight size={15} />
@@ -565,7 +574,13 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
                               (d) => d.key === i.componentDefinitionId,
                             )?.name
                           }{" "}
-                          · {i.enabled ? "Visible" : "Hidden"}
+                          ·{" "}
+                          {[
+                            i.enabled && "Dashboard",
+                            i.showOnAnalysis && "Analysis",
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "Hidden"}
                         </p>
                       </div>
                       <div className="manage-actions">

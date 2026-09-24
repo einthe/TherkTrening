@@ -112,6 +112,7 @@ export function ComponentSettings({
       version: 1,
       title: existing.title,
       enabled: existing.enabled,
+      showOnAnalysis: existing.showOnAnalysis,
       position: existing.position,
       config: storedConfigValid
         ? componentKey === "graph"
@@ -318,14 +319,29 @@ export function ComponentSettings({
             Show optional notes
           </label>
         )}
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={draft.enabled}
-            onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })}
-          />
-          Show on my dashboard
-        </label>
+        <fieldset className="component-visibility" disabled={busy}>
+          <legend>Show component in</legend>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={draft.enabled}
+              onChange={(e) =>
+                setDraft({ ...draft, enabled: e.target.checked })
+              }
+            />
+            Dashboard
+          </label>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={draft.showOnAnalysis}
+              onChange={(e) =>
+                setDraft({ ...draft, showOnAnalysis: e.target.checked })
+              }
+            />
+            Analysis
+          </label>
+        </fieldset>
         {error && (
           <p className="error" role="alert">
             {error}

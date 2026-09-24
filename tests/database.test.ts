@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { readFileSync, readdirSync } from "node:fs";
 import { newEvent } from "@/lib/domain/events";
+import { instanceFromRow } from "@/lib/data/server-repository";
 import {
   defaultExercise,
   workoutEvents,
@@ -1360,5 +1361,104 @@ describe.sequential("volleyball sessions", () => {
     config.entries = config.entries.map((entry) => ({ ...entry, mode: "raw" }));
     await mutate({ action: "saveInstance", instance: { ...instance, config } });
     await active("chart_trend", true);
+  });
+});
+
+describe("Analysis component visibility", () => {
+  it("preserves existing visibility and defaults old components to Dashboard only", async () => {
+    await asUser(migrationUser);
+    const migrated = (await rows("user_component_instances")).find(
+      (i) => i.id === migrationCard,
+    )!;
+    expect(migrated.enabled).toBe(false);
+    expect(migrated.show_on_analysis).toBe(false);
+    expect(instanceFromRow(migrated).showOnAnalysis).toBe(false);
+  });
+  it("round-trips independent visibility with ownership and stale-write checks", async () => {
+    await asUser(alice);
+    const instance = {
+      ...makeInstance("weekly_summary", 0),
+      enabled: false,
+      showOnAnalysis: true,
+    };
+    const before = await rows();
+    await mutate({ action: "saveInstance", instance });
+    const saved = (await rows("user_component_instances")).find(
+      (i) => i.id === instance.id,
+    )!;
+    expect(instanceFromRow(saved)).toMatchObject({
+      enabled: false,
+      showOnAnalysis: true,
+    });
+    await asUser(bob);
+    expect(
+      (await rows("user_component_instances")).find(
+        (i) => i.id === instance.id,
+      ),
+    ).toBeUndefined();
+    await expect(
+      mutate({
+        action: "saveInstance",
+        instance,
+        expectedUpdatedAt: saved.updated_at,
+      }),
+    ).rejects.toThrow("Invalid component owner");
+    await asUser(alice);
+    let previous = saved;
+    for (const [enabled, showOnAnalysis] of [
+      [true, true],
+      [true, false],
+      [false, false],
+    ]) {
+      await mutate({
+        action: "saveInstance",
+        instance: { ...instance, enabled, showOnAnalysis },
+        expectedUpdatedAt: previous.updated_at,
+      });
+      previous = (await rows("user_component_instances")).find(
+        (i) => i.id === instance.id,
+      )!;
+      expect(instanceFromRow(previous)).toMatchObject({
+        enabled,
+        showOnAnalysis,
+      });
+    }
+    await expect(
+      mutate({
+        action: "saveInstance",
+        instance,
+        expectedUpdatedAt: saved.updated_at,
+      }),
+    ).rejects.toThrow("changed elsewhere");
+    expect(await rows()).toEqual(before);
+  });
+  it("accepts old clients without resetting existing Analysis visibility and rejects invalid flags", async () => {
+    await asUser(alice);
+    const instance = {
+      ...makeInstance("weekly_summary", 0),
+      showOnAnalysis: true,
+    };
+    await mutate({ action: "saveInstance", instance });
+    const saved = (await rows("user_component_instances")).find(
+      (i) => i.id === instance.id,
+    )!;
+    const legacy: Record<string, unknown> = { ...instance };
+    delete legacy.showOnAnalysis;
+    await mutate({
+      action: "saveInstance",
+      instance: legacy,
+      expectedUpdatedAt: saved.updated_at,
+    });
+    expect(
+      (await rows("user_component_instances")).find((i) => i.id === instance.id)
+        ?.show_on_analysis,
+    ).toBe(true);
+    for (const showOnAnalysis of ["true", null, 1, []])
+      await expect(
+        mutate({
+          action: "saveInstance",
+          instance: { ...makeInstance("weekly_summary", 0), showOnAnalysis },
+        }),
+      ).rejects.toThrow("Invalid Analysis visibility");
   });
 });

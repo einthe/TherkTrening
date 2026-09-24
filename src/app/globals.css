@@ -2680,3 +2680,15 @@ tbody tr:hover {
 .chart-data td {
   white-space: nowrap;
 }
+
+.component-visibility {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.component-visibility legend {
+  margin-bottom: 12px;
+}

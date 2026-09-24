@@ -224,6 +224,7 @@ export class DemoRepository implements Repository {
       state.customExercises ??= [];
       state.injuries ??= legacyInjuries(state.events, state.instances);
       for (const instance of state.instances) {
+        instance.showOnAnalysis ??= false;
         if (
           instance.componentDefinitionId === "graph" &&
           instance.title === "Volume & pain"

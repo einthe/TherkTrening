@@ -117,7 +117,7 @@ test("component removal preserves events; reorder and visibility persist", async
     .getByRole("button", { name: "Move Workout up", exact: true })
     .click();
   await expect(page.getByRole("status")).toContainText(
-    "Dashboard order updated",
+    "Component order updated",
   );
   await page
     .getByRole("button", { name: "Remove Left knee pain", exact: true })

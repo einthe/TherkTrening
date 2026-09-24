@@ -42,7 +42,9 @@ test("dashboard controls stay on Components and the weekly summary is optional a
     page.getByRole("button", { name: "Add component", exact: true }),
   ).toBeVisible();
   await row.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByLabel("Show on my dashboard").uncheck();
+  await page
+    .getByRole("checkbox", { name: "Dashboard", exact: true })
+    .uncheck();
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(row).toContainText("Hidden");
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
@@ -55,7 +57,7 @@ test("dashboard controls stay on Components and the weekly summary is optional a
 
   await page.getByRole("button", { name: "Components", exact: true }).click();
   await row.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByLabel("Show on my dashboard").check();
+  await page.getByRole("checkbox", { name: "Dashboard", exact: true }).check();
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await page.getByRole("button", { name: "Customize", exact: true }).click();
   await page

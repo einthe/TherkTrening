@@ -118,6 +118,7 @@ export function instanceFromRow(r: Record<string, unknown>): Instance {
     version: r.version,
     title: r.title,
     enabled: r.enabled,
+    showOnAnalysis: r.show_on_analysis ?? false,
     position: r.position,
     config: r.config,
     createdAt: r.created_at,
