@@ -5,6 +5,7 @@ import { injuryName, type Injury } from "@/lib/domain/injuries";
 import { useState } from "react";
 import {
   Heart,
+  Volleyball,
   Dumbbell,
   ChartNoAxesCombined,
   Activity,
@@ -28,6 +29,7 @@ import {
 import { Modal } from "./ui";
 export const componentIcons = {
   heart: Heart,
+  volleyball: Volleyball,
   dumbbell: Dumbbell,
   chart: ChartNoAxesCombined,
   activity: Activity,

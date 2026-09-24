@@ -1,6 +1,7 @@
 "use client";
 import { isEventLocked } from "@/lib/domain/daily-events";
 import { PainSliders } from "./pain-sliders";
+import { VolleyballFields } from "./volleyball-logger";
 import { injuryName, type Injury } from "@/lib/domain/injuries";
 import { WorkoutLogger } from "./workout-logger";
 import { NumericInput } from "./numeric-input";
@@ -23,10 +24,18 @@ import {
   eventNames,
   eventTypes,
   payloadSchemas,
+  volleyballSessionSchema,
   type EventInput,
   type EventRecord,
 } from "@/lib/domain/events";
-import { Modal, formatDate, formatTime, localInput } from "./ui";
+import {
+  Modal,
+  DateInput,
+  formatDate,
+  formatDateTime,
+  formatTime,
+  localInput,
+} from "./ui";
 import { eventIcons } from "./displays";
 import type { Mutation } from "@/lib/data/repository";
 function painNames(event: EventRecord, injuries: Injury[]) {
@@ -99,7 +108,7 @@ export function EventHistory({
         </label>
         <label>
           From
-          <input
+          <DateInput
             type="date"
             value={from}
             onChange={(e) => {
@@ -110,7 +119,7 @@ export function EventHistory({
         </label>
         <label>
           To
-          <input
+          <DateInput
             type="date"
             min={from}
             value={to}
@@ -312,6 +321,10 @@ export function EventDetail({
       ? payloadSchemas.pain_measurement.safeParse(event.payload)
       : null;
   const catalog = exerciseCatalog(customExercises, events);
+  const volleyball =
+    event.eventType === "training_session"
+      ? volleyballSessionSchema.safeParse(payload)
+      : null;
   const sets = payload.sets as { reps: number; weightKg: number }[] | undefined;
   return (
     <Modal
@@ -348,7 +361,7 @@ export function EventDetail({
         <form onSubmit={save} className="settings-form">
           <label>
             Occurred at
-            <input
+            <DateInput
               type="datetime-local"
               required
               value={time}
@@ -356,7 +369,12 @@ export function EventDetail({
             />
           </label>
           {["injuryId", "exerciseId", "activityId", "metricId", "name", "unit"]
-            .filter((k) => k in payload)
+            .filter(
+              (k) =>
+                k in payload &&
+                !(k === "activityId" && volleyball?.success) &&
+                !(k === "name" && event.eventType === "pain_measurement"),
+            )
             .map((k) => (
               <label key={k}>
                 {
@@ -378,6 +396,13 @@ export function EventDetail({
                 />
               </label>
             ))}
+          {volleyball?.success && (
+            <VolleyballFields
+              value={volleyball.data}
+              disabled={busy}
+              onChange={(session) => setPayload(session)}
+            />
+          )}
           {pain?.success && "readings" in pain.data && (
             <PainSliders
               injuries={injuries}
@@ -499,7 +524,7 @@ export function EventDetail({
           <div className="form-grid">
             <label>
               Start (optional)
-              <input
+              <DateInput
                 type="datetime-local"
                 value={start}
                 onChange={(e) => setStart(e.target.value)}
@@ -507,7 +532,7 @@ export function EventDetail({
             </label>
             <label>
               End (optional)
-              <input
+              <DateInput
                 type="datetime-local"
                 min={start}
                 value={end}
@@ -551,9 +576,9 @@ export function EventDetail({
             )}
             <dl>
               <dt>Occurred</dt>
-              <dd>{new Date(event.occurredAt).toLocaleString()}</dd>
+              <dd>{formatDateTime(event.occurredAt)}</dd>
               <dt>Saved</dt>
-              <dd>{new Date(event.createdAt).toLocaleString()}</dd>
+              <dd>{formatDateTime(event.createdAt)}</dd>
               <dt>Status</dt>
               <dd>
                 {locked
@@ -563,13 +588,13 @@ export function EventDetail({
               {event.startedAt && (
                 <>
                   <dt>Start</dt>
-                  <dd>{new Date(event.startedAt).toLocaleString()}</dd>
+                  <dd>{formatDateTime(event.startedAt)}</dd>
                 </>
               )}
               {event.endedAt && (
                 <>
                   <dt>End</dt>
-                  <dd>{new Date(event.endedAt).toLocaleString()}</dd>
+                  <dd>{formatDateTime(event.endedAt)}</dd>
                 </>
               )}
               {event.parentEventId && (
@@ -590,6 +615,26 @@ export function EventDetail({
                 </>
               )}
             </dl>
+            {volleyball?.success && (
+              <dl>
+                <dt>Session type</dt>
+                <dd>
+                  {volleyball.data.sessionType === "match"
+                    ? "Match"
+                    : "Practice"}
+                </dd>
+                {volleyball.data.sessionType === "match" && (
+                  <>
+                    <dt>Sets played</dt>
+                    <dd>{volleyball.data.setsPlayed}</dd>
+                  </>
+                )}
+                <dt>Intensity</dt>
+                <dd>{volleyball.data.intensity}/10</dd>
+                <dt>Jumps</dt>
+                <dd>{volleyball.data.jumps}/10</dd>
+              </dl>
+            )}
             {recordedPain?.success && (
               <dl>
                 {("readings" in recordedPain.data

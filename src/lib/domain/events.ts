@@ -30,6 +30,7 @@ export const painReadingSchema = z
 export type PainReading = z.infer<typeof painReadingSchema>;
 export const painCheckInSchema = z
   .object({
+    name: identifier.optional(),
     readings: z
       .array(painReadingSchema)
       .min(1)
@@ -41,8 +42,28 @@ export const painCheckInSchema = z
       ),
   })
   .strict();
+const volleyballRatingsSchema = z
+  .object({
+    activityId: z.literal("volleyball"),
+    intensity: z.number().int().min(0).max(10),
+    jumps: z.number().int().min(0).max(10),
+  })
+  .strict();
+export const volleyballSessionSchema = z.union([
+  volleyballRatingsSchema.extend({
+    sessionType: z.literal("practice").default("practice"),
+  }),
+  volleyballRatingsSchema.extend({
+    sessionType: z.literal("match"),
+    setsPlayed: z.number().int().min(0).max(5),
+  }),
+]);
+export type VolleyballSession = z.infer<typeof volleyballSessionSchema>;
 export const payloadSchemas = {
-  pain_measurement: z.union([painReadingSchema, painCheckInSchema]),
+  pain_measurement: z.union([
+    painReadingSchema.extend({ name: identifier.optional() }),
+    painCheckInSchema,
+  ]),
   workout: z
     .object({
       name: z.string().trim().min(1).max(120),
@@ -50,7 +71,10 @@ export const payloadSchemas = {
     })
     .strict(),
   exercise: exercisePayloadSchema,
-  training_session: z.object({ activityId: identifier }).strict(),
+  training_session: z.union([
+    z.object({ activityId: identifier }).strict(),
+    volleyballSessionSchema,
+  ]),
   measurement: z
     .object({
       metricId: identifier,
@@ -194,10 +218,10 @@ export function describeEvent(event: EventRecord): string {
     return "Unsupported historical data";
   const p = parsed.data;
   if (event.eventType === "pain_measurement")
-    return `${new Date(event.occurredAt).toLocaleDateString("en-GB", { weekday: "long" })} - Pain check-in`;
+    return ("name" in p && p.name) || "Pain check-in";
   if ("exerciseId" in p)
     return `${label(p.exerciseId)} · ${p.sets.length} sets`;
-  if ("name" in p) return p.name;
+  if ("name" in p && p.name) return p.name;
   if ("activityId" in p) return label(p.activityId);
   if ("metricId" in p) return `${label(p.metricId)} · ${p.value} ${p.unit}`;
   return eventNames[event.eventType];

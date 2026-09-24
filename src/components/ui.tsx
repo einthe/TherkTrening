@@ -1,5 +1,12 @@
 "use client";
-import { Component, useEffect, useRef, type ReactNode } from "react";
+import {
+  Component,
+  useEffect,
+  useRef,
+  useId,
+  type ReactNode,
+  type InputHTMLAttributes,
+} from "react";
 import { X, AlertCircle } from "lucide-react";
 export function Modal({
   title,
@@ -82,11 +89,59 @@ export function localInput(iso = new Date().toISOString()) {
     .toISOString()
     .slice(0, 16);
 }
-export function formatDate(iso: string) {
+export function formatDate(
+  iso: string,
+  options: Intl.DateTimeFormatOptions = {},
+) {
   return new Date(iso).toLocaleDateString("en-GB", {
+    weekday: "short",
     day: "numeric",
     month: "short",
+    ...(iso.length === 10 ? { timeZone: "UTC" } : {}),
+    ...options,
   });
+}
+export function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+export function DateInput({
+  value,
+  ...props
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value"> & {
+  type: "date" | "datetime-local";
+  value: string;
+}) {
+  const hintId = useId();
+  const date = new Date(value.length === 10 ? `${value}T12:00:00` : value);
+  const weekday = Number.isNaN(date.getTime())
+    ? ""
+    : date.toLocaleDateString("en-GB", { weekday: "short" });
+  return (
+    <span className="date-input">
+      <input
+        {...props}
+        value={value}
+        aria-describedby={
+          [props["aria-describedby"], weekday ? hintId : undefined]
+            .filter(Boolean)
+            .join(" ") || undefined
+        }
+      />
+      {weekday && (
+        <span id={hintId} className="date-weekday" aria-hidden="true">
+          {weekday}
+        </span>
+      )}
+    </span>
+  );
 }
 export function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-GB", {

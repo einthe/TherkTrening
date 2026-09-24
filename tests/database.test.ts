@@ -116,7 +116,7 @@ beforeAll(async () => {
         [
           injuryMigrationUser,
           JSON.stringify({
-            targets: ["left-knee", "left_knee"],
+            targets: ["left-knee", "left_knee", "right-elbow"],
             showNotes: false,
           }),
         ],
@@ -311,6 +311,7 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
   it("enforces locking, separate unlocking, stale writes, and deletion", async () => {
     await asUser(alice);
     const event = newEvent("pain_measurement", {
+      name: "Morning joint check",
       readings: [
         { injuryId: "left-knee", painLevel: 3 },
         { injuryId: "right-shoulder", painLevel: 7 },
@@ -757,6 +758,7 @@ describe("grouped pain storage", () => {
     const updated = {
       ...event,
       payload: {
+        name: "Morning joint check",
         readings: [
           { injuryId: "knee", painLevel: 4 },
           { injuryId: "shoulder", painLevel: 8 },
@@ -775,6 +777,9 @@ describe("grouped pain storage", () => {
     expect(await get(event.id)).toBeUndefined();
   });
   it.each([
+    { name: "", readings: [{ injuryId: "knee", painLevel: 3 }] },
+    { name: "x".repeat(81), readings: [{ injuryId: "knee", painLevel: 3 }] },
+    { name: 12, readings: [{ injuryId: "knee", painLevel: 3 }] },
     { readings: [] },
     { readings: null },
     { readings: {} },
@@ -1035,6 +1040,16 @@ describe.sequential("injury library", () => {
     ]);
     expect(injuries.filter((i) => i.name === "Left knee")).toHaveLength(2);
     const originalEvents = await rows();
+    expect(
+      originalEvents.find((event) => "readings" in (event.payload as object))
+        ?.payload,
+    ).toMatchObject({
+      name: "Pain",
+      readings: [
+        { injuryId: "left-knee", painLevel: 3 },
+        { injuryId: "right-elbow", painLevel: 5 },
+      ],
+    });
     const knee = injuries.find((i) => i.id === "left-knee")!;
     await injuryLibrary({
       action: "saveInjury",
@@ -1127,5 +1142,93 @@ describe.sequential("injury library", () => {
     await expect(
       injuryLibrary({ action: "saveInjury", injury }),
     ).rejects.toThrow("Approved account required");
+  });
+});
+
+describe.sequential("volleyball sessions", () => {
+  it("registers the component and saves both ratings together, with owner-scoped history editing", async () => {
+    await asUser(alice);
+    expect(
+      (await rows("component_definitions")).find((d) => d.key === "graph")
+        ?.name,
+    ).toBe("Chart");
+    const card = makeInstance("volleyball_logger", 0);
+    await mutate({ action: "saveInstance", instance: card });
+    const event = newEvent("training_session", {
+      activityId: "volleyball",
+      intensity: 10,
+      jumps: 0,
+    });
+    await mutate({ action: "createEvents", events: [event] });
+    expect((await rows()).find((e) => e.id === event.id)?.payload).toEqual(
+      event.payload,
+    );
+    const updated = {
+      ...event,
+      payload: {
+        activityId: "volleyball",
+        sessionType: "match",
+        setsPlayed: 5,
+        intensity: 6,
+        jumps: 9,
+      },
+    };
+    await mutate({
+      action: "editEvent",
+      event: updated,
+      expectedUpdatedAt: (await get(event.id)).updated_at,
+    });
+    expect((await rows()).find((e) => e.id === event.id)?.payload).toEqual(
+      updated.payload,
+    );
+    await asUser(bob);
+    expect(await get(event.id)).toBeUndefined();
+    await expect(
+      mutate({
+        action: "saveInstance",
+        instance: {
+          ...makeInstance("volleyball_logger", 0),
+          config: { showNotes: "yes" },
+        },
+      }),
+    ).rejects.toThrow("Invalid volleyball configuration");
+  });
+  it.each([
+    { activityId: "volleyball", intensity: -1, jumps: 5 },
+    { activityId: "volleyball", intensity: 5, jumps: 11 },
+    { activityId: "volleyball", intensity: 5.5, jumps: 5 },
+    { activityId: "volleyball", intensity: 5, jumps: "3" },
+    { activityId: "volleyball", intensity: 5 },
+    { activityId: "volleyball", jumps: 5 },
+    { activityId: "running", intensity: 5, jumps: 5 },
+    ...[
+      { sessionType: "match", setsPlayed: -1 },
+      { sessionType: "match", setsPlayed: 6 },
+      { sessionType: "match", setsPlayed: 2.5 },
+      { sessionType: "match", setsPlayed: "3" },
+      { sessionType: "match" },
+      { sessionType: "practice", setsPlayed: 2 },
+      { setsPlayed: 2 },
+      { sessionType: "tournament" },
+      { sessionType: null },
+    ].map((fields) => ({
+      activityId: "volleyball",
+      intensity: 5,
+      jumps: 5,
+      ...fields,
+    })),
+  ])("rejects invalid volleyball ratings: %j", async (payload) => {
+    await asUser(alice);
+    await expect(
+      mutate({
+        action: "createEvents",
+        events: [
+          {
+            ...newEvent("training_session", { activityId: "volleyball" }),
+            payload,
+          },
+        ],
+      }),
+    ).rejects.toThrow("Invalid volleyball");
   });
 });

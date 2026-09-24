@@ -26,7 +26,7 @@ import {
   type EventInput,
   type EventRecord,
 } from "@/lib/domain/events";
-import { localInput, number, formatDate, formatTime } from "./ui";
+import { DateInput, localInput, number, formatDate, formatTime } from "./ui";
 type Props = {
   instance: Instance;
   events: EventRecord[];
@@ -57,7 +57,7 @@ export function When({
       {open && (
         <label className="sr-label">
           Event date & time
-          <input
+          <DateInput
             aria-label="Event date and time"
             type="datetime-local"
             required
@@ -138,7 +138,7 @@ export function PainLogger({
         : (activeToday?.occurredAt ?? new Date().toISOString());
       const input = newEvent(
         "pain_measurement",
-        { readings },
+        { name: instance.title, readings },
         {
           ...(activeToday
             ? {
@@ -316,7 +316,7 @@ export function OtherLogger({ instance, save }: Props) {
       {"activityId" in config ? (
         <label>
           End time <span className="muted">(optional)</span>
-          <input
+          <DateInput
             type="datetime-local"
             value={end}
             min={time}

@@ -1,4 +1,8 @@
-import { injuryInputSchema, legacyInjuries } from "@/lib/domain/injuries";
+import {
+  injuryInputSchema,
+  legacyInjuries,
+  withLegacyPainTitles,
+} from "@/lib/domain/injuries";
 import {
   isEventLocked,
   nextLocalMidnight,
@@ -144,7 +148,7 @@ export function createDemo(): Snapshot {
       role: "user",
       accountStatus: "approved",
     },
-    events: groupLegacyWorkouts(events),
+    events: withLegacyPainTitles(groupLegacyWorkouts(events), instances),
     instances,
     workoutTemplates: [],
     customExercises: [],
@@ -176,6 +180,12 @@ export class DemoRepository implements Repository {
     if (raw) {
       const state: Snapshot = JSON.parse(raw);
       for (const definition of componentDefinitions) {
+        if (definition.key === "graph") {
+          const existing = state.definitions.components.find(
+            (d) => d.key === "graph",
+          );
+          if (existing) existing.name = "Chart";
+        }
         if (
           !state.definitions.components.some((d) => d.key === definition.key)
         ) {
@@ -187,7 +197,10 @@ export class DemoRepository implements Repository {
           });
         }
       }
-      state.events = groupLegacyWorkouts(state.events);
+      state.events = withLegacyPainTitles(
+        groupLegacyWorkouts(state.events),
+        state.instances,
+      );
       state.workoutTemplates ??= [];
       state.workoutTemplates = state.workoutTemplates.map((t) => ({
         ...t,
@@ -203,6 +216,11 @@ export class DemoRepository implements Repository {
       state.customExercises ??= [];
       state.injuries ??= legacyInjuries(state.events, state.instances);
       for (const instance of state.instances) {
+        if (
+          instance.componentDefinitionId === "graph" &&
+          instance.title === "Volume & pain"
+        )
+          instance.title = "Chart";
         if ((instance.componentDefinitionId as string) === "exercise_logger") {
           const config = instance.config as {
             exerciseId: string;

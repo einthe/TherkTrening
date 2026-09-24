@@ -7,6 +7,7 @@ import {
   describeEvent,
   newEvent,
   validateParent,
+  volleyballSessionSchema,
   type EventRecord,
   type Profile,
 } from "@/lib/domain/events";
@@ -304,6 +305,7 @@ describe("authorization and configuration", () => {
       "pain_logger",
       "workout_logger",
       "session_logger",
+      "volleyball_logger",
       "value_logger",
       "graph",
       "statistic",
@@ -345,7 +347,7 @@ describe("grouped pain check-ins", () => {
     const checkIn = record(
       newEvent(
         "pain_measurement",
-        { readings },
+        { name: "Morning pain", readings },
         { occurredAt: "2026-09-23T10:00:00Z" },
       ),
     );
@@ -356,8 +358,8 @@ describe("grouped pain check-ins", () => {
         { occurredAt: "2026-09-23T11:00:00Z" },
       ),
     );
-    expect(describeEvent(checkIn)).toBe("Wednesday - Pain check-in");
-    expect(describeEvent(oldReading)).toBe("Wednesday - Pain check-in");
+    expect(describeEvent(checkIn)).toBe("Morning pain");
+    expect(describeEvent(oldReading)).toBe("Pain check-in");
     expect(
       runPipeline([checkIn, oldReading], painPipeline("left-knee")),
     ).toEqual([{ date: "2026-09-23", value: 2 }]);
@@ -383,5 +385,31 @@ describe("grouped pain check-ins", () => {
     { readings, injuryId: "left-knee", painLevel: 3 },
   ])("rejects malformed grouped payload %j", (payload) => {
     expect(() => newEvent("pain_measurement", payload)).toThrow();
+  });
+});
+
+describe("volleyball session types", () => {
+  const ratings = { activityId: "volleyball", intensity: 6, jumps: 8 };
+  it("defaults legacy ratings to Practice and accepts matches at both set limits", () => {
+    expect(volleyballSessionSchema.parse(ratings).sessionType).toBe("practice");
+    for (const setsPlayed of [0, 5])
+      expect(
+        volleyballSessionSchema.safeParse({
+          ...ratings,
+          sessionType: "match",
+          setsPlayed,
+        }).success,
+      ).toBe(true);
+  });
+  it.each([
+    { sessionType: "match" },
+    { sessionType: "practice", setsPlayed: 0 },
+    { sessionType: "match", setsPlayed: 6 },
+    { sessionType: "match", setsPlayed: 1.5 },
+    { sessionType: "other" },
+  ])("rejects inconsistent session details: %j", (fields) => {
+    expect(
+      volleyballSessionSchema.safeParse({ ...ratings, ...fields }).success,
+    ).toBe(false);
   });
 });

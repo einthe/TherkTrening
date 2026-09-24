@@ -80,6 +80,7 @@ test("injury library preserves legacy history, supports rename and notes, and on
     JSON.parse(localStorage.getItem("therktrening-demo-v1")!),
   );
   expect(logged.events).toHaveLength(before.events.length + 1);
+  expect(logged.events.at(-1).payload.name).toBe("Left knee pain");
   expect(logged.events.at(-1).payload.readings).toEqual([
     { injuryId: "left-knee", painLevel: 7 },
     { injuryId: shoulderId, painLevel: 2 },
@@ -105,7 +106,7 @@ test("injury library preserves legacy history, supports rename and notes, and on
     .click();
   await page.getByLabel("Search events").fill("Rotator cuff");
   await page
-    .getByRole("button", { name: "Thursday - Pain check-in", exact: true })
+    .getByRole("button", { name: "Left knee pain", exact: true })
     .click();
   await expect(
     page.getByRole("dialog").getByText("Rotator cuff", { exact: true }),
@@ -217,7 +218,7 @@ test("a check-in can be edited, locked, and deleted as one event", async ({
     .getByRole("button", { name: "Event history", exact: true })
     .click();
   const row = page.locator(".event-name").first();
-  await expect(row).toHaveText(/ - Pain check-in$/);
+  await expect(row).toHaveText("Left knee pain");
   await expect(row).toHaveCount(1);
   await row.click();
   let dialog = page.getByRole("dialog");
@@ -268,7 +269,7 @@ test("a check-in can be edited, locked, and deleted as one event", async ({
     .click();
   await page.getByLabel("Search events").fill("Right shoulder");
   const updatedRow = page.getByRole("button", {
-    name: "Thursday - Pain check-in",
+    name: "Left knee pain",
     exact: true,
   });
   await expect(updatedRow).toHaveCount(1);

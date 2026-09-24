@@ -141,13 +141,7 @@ export function Graph({
               />
               <XAxis
                 dataKey="date"
-                tickFormatter={(v) =>
-                  new Date(`${v}T12:00:00Z`).toLocaleDateString("en-GB", {
-                    day: "numeric",
-                    month: "short",
-                    timeZone: "UTC",
-                  })
-                }
+                tickFormatter={(v) => formatDate(v, { timeZone: "UTC" })}
                 stroke="var(--muted)"
                 fontSize={11}
                 tickLine={false}
@@ -179,6 +173,12 @@ export function Graph({
                 />
               )}
               <Tooltip
+                labelFormatter={(value) =>
+                  formatDate(String(value), {
+                    timeZone: "UTC",
+                    year: "numeric",
+                  })
+                }
                 contentStyle={{
                   background: "var(--surface-raised)",
                   border: "1px solid var(--border-strong)",
@@ -248,7 +248,9 @@ export function Graph({
             <tbody>
               {result.data.map((p) => (
                 <tr key={p.date}>
-                  <td>{p.date}</td>
+                  <td>
+                    {formatDate(p.date, { timeZone: "UTC", year: "numeric" })}
+                  </td>
                   {config.sources.map((_, i) => (
                     <td key={i}>
                       {p[`series${i}`] === null
@@ -457,7 +459,7 @@ export function WeeklySummary({
             <div key={i}>
               <span>
                 {d.toLocaleDateString("en-GB", {
-                  weekday: "narrow",
+                  weekday: "short",
                 })}
               </span>
               <i className={active ? "filled" : ""}>

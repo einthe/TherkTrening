@@ -1,6 +1,7 @@
 "use client";
 import { WorkoutLibrary, ExerciseLibrary } from "./workout-library";
 import { InjuryLibrary } from "./injury-library";
+import { VolleyballLogger } from "./volleyball-logger";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -218,6 +219,8 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
           onManageExercises={() => navigate("exercises")}
         />
       );
+    if (i.componentDefinitionId === "volleyball_logger")
+      return <VolleyballLogger {...props} />;
     if (
       i.componentDefinitionId === "session_logger" ||
       i.componentDefinitionId === "value_logger"
@@ -335,6 +338,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             <span className="today" suppressHydrationWarning>
               <CalendarDays size={14} />
               {new Date().toLocaleDateString("en-GB", {
+                weekday: "short",
                 day: "numeric",
                 month: "long",
                 year: "numeric",

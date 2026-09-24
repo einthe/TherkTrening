@@ -26,6 +26,7 @@ export const componentSchemas = {
   session_logger: z
     .object({ ...common, activityId: z.string().trim().min(1).max(80) })
     .strict(),
+  volleyball_logger: z.object(common).strict(),
   value_logger: z
     .object({
       ...common,
@@ -118,7 +119,7 @@ export const componentDefinitions = [
   },
   {
     key: "graph",
-    name: "Volume & pain",
+    name: "Chart",
     kind: "display",
     description: "Compare training volume with how you feel over time.",
     icon: "chart",
@@ -132,6 +133,16 @@ export const componentDefinitions = [
         { name: "Left knee pain", unit: "/10", pipeline: painPipeline() },
       ],
     },
+  },
+  {
+    key: "volleyball_logger",
+    name: "Volleyball",
+    kind: "logger",
+    description: "Rate session intensity and jumping from 0 to 10.",
+    icon: "volleyball",
+    supportedEventTypes: ["training_session"],
+    capabilities: { canCreateEvents: true },
+    config: { showNotes: true },
   },
   {
     key: "session_logger",

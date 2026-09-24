@@ -37,7 +37,7 @@ test("reference flow: configure, log, graph, edit, lock, unlock, backdate, persi
     .click();
   await page.getByLabel("Event type").selectOption("pain_measurement");
   await page
-    .getByRole("button", { name: / - Pain check-in$/, exact: true })
+    .getByRole("button", { name: "Left knee pain", exact: true })
     .first()
     .click();
   await expect(
@@ -57,7 +57,7 @@ test("reference flow: configure, log, graph, edit, lock, unlock, backdate, persi
   await page.getByLabel("From", { exact: true }).fill("2020-01-01");
   await page.getByLabel("To", { exact: true }).fill("2020-01-03");
   await page
-    .getByRole("button", { name: "Thursday - Pain check-in", exact: true })
+    .getByRole("button", { name: "Left knee pain", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "Edit event", exact: true }),
@@ -133,7 +133,7 @@ test("component removal preserves events; reorder and visibility persist", async
     .click();
   await page.getByLabel("Event type").selectOption("pain_measurement");
   await expect(
-    page.getByRole("button", { name: / - Pain check-in$/ }).first(),
+    page.getByRole("button", { name: "Left knee pain" }).first(),
   ).toBeVisible();
 });
 test("mobile layout is usable without horizontal overflow", async ({

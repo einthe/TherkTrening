@@ -16,6 +16,33 @@ export function injuryName(id: string, injuries: Injury[]) {
   return injuries.find((injury) => injury.id === id)?.name ?? label(id);
 }
 
+export function withLegacyPainTitles(
+  events: EventRecord[],
+  instances: Instance[],
+): EventRecord[] {
+  const cards = instances.filter(
+    (i) => i.componentDefinitionId === "pain_logger",
+  );
+  return events.map((event) => {
+    if (event.eventType !== "pain_measurement" || event.schemaVersion !== 1)
+      return event;
+    const parsed = payloadSchemas.pain_measurement.safeParse(event.payload);
+    if (!parsed.success || parsed.data.name) return event;
+    const readings =
+      "readings" in parsed.data ? parsed.data.readings : [parsed.data];
+    const matches = cards.filter((card) => {
+      const config = componentSchemas.pain_logger.safeParse(card.config);
+      return (
+        config.success &&
+        readings.every((r) => config.data.targets.includes(r.injuryId))
+      );
+    });
+    return matches.length === 1
+      ? { ...event, payload: { ...parsed.data, name: matches[0].title } }
+      : event;
+  });
+}
+
 export function legacyInjuries(
   events: EventRecord[],
   instances: Instance[],
