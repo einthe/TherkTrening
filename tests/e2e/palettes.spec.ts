@@ -54,9 +54,9 @@ test("palettes recolor the interface and charts, persist across pages, and prese
     }
   }
   await picker.selectOption("petrol");
-  const line = page.locator(".recharts-line-curve").first();
+  const line = page.locator(".recharts-line-dot").first();
   await expect(line).toBeVisible();
-  expect(await line.evaluate((el) => getComputedStyle(el).stroke)).toBe(
+  expect(await line.evaluate((el) => getComputedStyle(el).fill)).toBe(
     "rgb(130, 210, 216)",
   );
   await page

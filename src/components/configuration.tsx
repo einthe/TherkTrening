@@ -1,7 +1,7 @@
 "use client";
 import { NumericInput } from "./numeric-input";
 import { PainTargets } from "./pain-targets";
-import { injuryName, type Injury } from "@/lib/domain/injuries";
+import { type Injury } from "@/lib/domain/injuries";
 import { useState } from "react";
 import {
   Heart,
@@ -19,7 +19,6 @@ import {
   componentSchemas,
   makeInstance,
   instanceInputSchema,
-  painPipeline,
   volumePipeline,
   type ComponentKey,
   type Instance,
@@ -27,6 +26,8 @@ import {
   type Definition,
 } from "@/lib/domain/components";
 import { Modal } from "./ui";
+import { ChartSettings } from "./chart-settings";
+import type { ChartCatalog } from "@/lib/domain/charts";
 export const componentIcons = {
   heart: Heart,
   volleyball: Volleyball,
@@ -86,9 +87,11 @@ export function ComponentSettings({
   onClose,
   injuries,
   onManageInjuries,
+  chartCatalog,
 }: {
   componentKey: ComponentKey;
   injuries: Injury[];
+  chartCatalog: ChartCatalog;
   onManageInjuries: () => void;
   existing?: Instance;
   position: number;
@@ -110,7 +113,11 @@ export function ComponentSettings({
       title: existing.title,
       enabled: existing.enabled,
       position: existing.position,
-      config: storedConfigValid ? existing.config : defaults.config,
+      config: storedConfigValid
+        ? componentKey === "graph"
+          ? componentSchemas.graph.parse(existing.config)
+          : existing.config
+        : defaults.config,
     });
   });
   const [error, setError] = useState("");
@@ -153,25 +160,11 @@ export function ComponentSettings({
     componentKey === "statistic"
       ? (config as ReturnType<typeof componentSchemas.statistic.parse>)
       : null;
-  function sourceField(index: number, target: string) {
-    if (!graph) return;
-    const sources = [...graph.sources];
-    const isVolume = sources[index].pipeline.some(
-      (s) => s.key === "placeholder_volume_load",
-    );
-    sources[index] = {
-      ...sources[index],
-      pipeline: isVolume ? volumePipeline(target) : painPipeline(target),
-      name: isVolume
-        ? `${target.replace(/-/g, " ")} volume`
-        : `${injuryName(target, injuries)} pain`,
-    };
-    field("sources", sources);
-  }
   return (
     <Modal
       title={existing ? "Component settings" : "Add a component"}
       onClose={onClose}
+      wide={componentKey === "graph"}
     >
       <form className="settings-form" onSubmit={submit}>
         {!storedConfigValid && (
@@ -241,7 +234,7 @@ export function ComponentSettings({
             </label>
           </>
         )}
-        {(graph || stat) && (
+        {stat && (
           <label>
             Time range
             <select
@@ -257,81 +250,12 @@ export function ComponentSettings({
           </label>
         )}
         {graph && (
-          <>
-            <label>
-              Display
-              <select
-                value={graph.display}
-                onChange={(e) => field("display", e.target.value)}
-              >
-                <option value="line">Line graph</option>
-                <option value="bar">Bar graph</option>
-              </select>
-            </label>
-            {graph.sources.map((source, i) => (
-              <label key={i}>
-                {source.pipeline.some(
-                  (s) => s.key === "placeholder_volume_load",
-                )
-                  ? "Exercise ID"
-                  : "Injury"}
-                {source.pipeline.some(
-                  (s) => s.key === "placeholder_volume_load",
-                ) ? (
-                  <input
-                    required
-                    maxLength={80}
-                    value={
-                      source.pipeline.find((s) => s.key === "filter_target")
-                        ?.value ?? ""
-                    }
-                    onChange={(e) => sourceField(i, e.target.value)}
-                  />
-                ) : (
-                  <select
-                    required
-                    value={
-                      source.pipeline.find((s) => s.key === "filter_target")
-                        ?.value ?? ""
-                    }
-                    onChange={(e) => sourceField(i, e.target.value)}
-                  >
-                    <option value="">Choose an injury</option>
-                    {injuries.map((injury) => (
-                      <option key={injury.id} value={injury.id}>
-                        {injury.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </label>
-            ))}
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={graph.sources.length > 1}
-                disabled={!injuries.length && graph.sources.length < 2}
-                onChange={(e) =>
-                  field(
-                    "sources",
-                    e.target.checked
-                      ? [
-                          ...graph.sources,
-                          {
-                            name: `${injuries[0]?.name ?? "Injury"} pain`,
-                            unit: "/10",
-                            pipeline: painPipeline(
-                              injuries[0]?.id ?? "left-knee",
-                            ),
-                          },
-                        ]
-                      : graph.sources.slice(0, 1),
-                  )
-                }
-              />
-              Compare with pain
-            </label>
-          </>
+          <ChartSettings
+            config={graph}
+            catalog={chartCatalog}
+            disabled={busy}
+            onChange={(config) => setDraft({ ...draft, config })}
+          />
         )}
         {stat && (
           <>

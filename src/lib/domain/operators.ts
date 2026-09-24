@@ -44,6 +44,16 @@ export const pipelineSchema = z.array(stepSchema).min(1).max(12);
 export type Pipeline = z.infer<typeof pipelineSchema>;
 export const operatorDefinitions = [
   {
+    key: "chart_source",
+    name: "Chart data source",
+    description: "Extract registered chart metrics from logged events.",
+  },
+  {
+    key: "chart_trend",
+    name: "Chart trend",
+    description: "Average recorded chart values by UTC day or calendar week.",
+  },
+  {
     key: "filter_type",
     name: "Event type filter",
     description: "Select events by their registered type.",

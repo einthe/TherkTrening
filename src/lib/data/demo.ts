@@ -197,6 +197,14 @@ export class DemoRepository implements Repository {
           });
         }
       }
+      for (const definition of operatorDefinitions) {
+        if (!state.definitions.operators.some((d) => d.key === definition.key))
+          state.definitions.operators.push({
+            ...definition,
+            active: true,
+            version: 1,
+          });
+      }
       state.events = withLegacyPainTitles(
         groupLegacyWorkouts(state.events),
         state.instances,

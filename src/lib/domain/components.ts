@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  chartConfigSchema,
+  legacyChartSchema,
+  upgradeChartConfig,
+} from "./charts";
 import { pipelineSchema, type Pipeline } from "./operators";
 import { defaultExercise, workoutExercisesSchema } from "./workouts";
 const common = { showNotes: z.boolean().default(false) };
@@ -35,12 +40,8 @@ export const componentSchemas = {
     })
     .strict(),
   graph: z
-    .object({
-      days: z.number().int().min(1).max(365),
-      display: z.enum(["line", "bar"]),
-      sources: z.array(graphSourceSchema).min(1).max(2),
-    })
-    .strict(),
+    .union([chartConfigSchema, legacyChartSchema])
+    .transform(upgradeChartConfig),
   statistic: z
     .object({
       days: z.number().int().min(1).max(365),
@@ -121,16 +122,38 @@ export const componentDefinitions = [
     key: "graph",
     name: "Chart",
     kind: "display",
-    description: "Compare training volume with how you feel over time.",
+    description:
+      "Compare training, pain, and other measurements with custom entries and trends.",
     icon: "chart",
-    supportedEventTypes: ["exercise", "pain_measurement", "measurement"],
+    supportedEventTypes: [
+      "exercise",
+      "workout",
+      "pain_measurement",
+      "training_session",
+      "measurement",
+    ],
     capabilities: { canReadEvents: true, canRunOperators: true },
     config: {
-      days: 21,
-      display: "line",
-      sources: [
-        { name: "Squat volume", unit: "kg·reps", pipeline: volumePipeline() },
-        { name: "Left knee pain", unit: "/10", pipeline: painPipeline() },
+      version: 2,
+      range: { amount: 21, unit: "days" },
+      mode: "day",
+      entries: [
+        {
+          id: "00000000-0000-4000-8000-000000000001",
+          name: "",
+          source: { type: "exercise", target: "squat", metric: "volume" },
+          display: "line",
+          mode: "inherit",
+          color: "volume",
+        },
+        {
+          id: "00000000-0000-4000-8000-000000000002",
+          name: "",
+          source: { type: "pain", target: "left-knee", metric: "painLevel" },
+          display: "line",
+          mode: "inherit",
+          color: "pain",
+        },
       ],
     },
   },
@@ -170,7 +193,13 @@ export const componentDefinitions = [
     kind: "display",
     description: "Show a total, average, count, or latest value.",
     icon: "gauge",
-    supportedEventTypes: ["exercise", "pain_measurement", "measurement"],
+    supportedEventTypes: [
+      "exercise",
+      "workout",
+      "pain_measurement",
+      "training_session",
+      "measurement",
+    ],
     capabilities: { canReadEvents: true, canRunOperators: true },
     config: {
       days: 21,

@@ -41,10 +41,17 @@ import {
   type ComponentKey,
   type Instance,
 } from "@/lib/domain/components";
-import { type EventInput, type EventRecord } from "@/lib/domain/events";
+import {
+  payloadSchemas,
+  type EventInput,
+  type EventRecord,
+} from "@/lib/domain/events";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { PainLogger, OtherLogger } from "./loggers";
-import { Graph, RecentEvents, Statistic, WeeklySummary } from "./displays";
+import { RecentEvents, Statistic, WeeklySummary } from "./displays";
+import { Graph } from "./chart";
+import { emptyChartCatalog, type ChartCatalog } from "@/lib/domain/charts";
+import { exerciseCatalog } from "@/lib/domain/workouts";
 import {
   ComponentBrowser,
   ComponentSettings,
@@ -70,6 +77,51 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
   );
   const day = useLocalDay();
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const chartCatalog = useMemo<ChartCatalog>(() => {
+    if (!snapshot) return emptyChartCatalog;
+    const workouts = new Set(snapshot.workoutTemplates.map((t) => t.name));
+    const activities = new Set<string>(["volleyball"]);
+    const measurements = new Map<string, { id: string; unit: string }>();
+    for (const event of snapshot.events) {
+      if (event.eventType === "workout") {
+        const p = payloadSchemas.workout.safeParse(event.payload);
+        if (p.success) workouts.add(p.data.name);
+      }
+      if (event.eventType === "training_session") {
+        const p = payloadSchemas.training_session.safeParse(event.payload);
+        if (p.success) activities.add(p.data.activityId);
+      }
+      if (event.eventType === "measurement") {
+        const p = payloadSchemas.measurement.safeParse(event.payload);
+        if (p.success)
+          measurements.set(JSON.stringify([p.data.metricId, p.data.unit]), {
+            id: p.data.metricId,
+            unit: p.data.unit,
+          });
+      }
+    }
+    for (const instance of snapshot.instances) {
+      if (instance.componentDefinitionId === "value_logger") {
+        const p = componentSchemas.value_logger.safeParse(instance.config);
+        if (p.success)
+          measurements.set(JSON.stringify([p.data.metricId, p.data.unit]), {
+            id: p.data.metricId,
+            unit: p.data.unit,
+          });
+      }
+      if (instance.componentDefinitionId === "session_logger") {
+        const p = componentSchemas.session_logger.safeParse(instance.config);
+        if (p.success) activities.add(p.data.activityId);
+      }
+    }
+    return {
+      exercises: exerciseCatalog(snapshot.customExercises, snapshot.events),
+      injuries: snapshot.injuries,
+      workouts: [...workouts].sort(),
+      activities: [...activities].sort(),
+      measurements: [...measurements.values()],
+    };
+  }, [snapshot]);
   const [page, setPage] = useState<Page>("dashboard");
   const [browser, setBrowser] = useState(false);
   const [settings, setSettings] = useState<{
@@ -227,9 +279,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     )
       return <OtherLogger {...props} />;
     if (i.componentDefinitionId === "graph")
-      return (
-        <Graph {...props} operators={operators} injuries={snapshot!.injuries} />
-      );
+      return <Graph {...props} operators={operators} catalog={chartCatalog} />;
     if (i.componentDefinitionId === "weekly_summary") {
       componentSchemas.weekly_summary.parse(i.config);
       return (
@@ -627,6 +677,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       )}
       {settings && (
         <ComponentSettings
+          chartCatalog={chartCatalog}
           injuries={snapshot?.injuries ?? []}
           onManageInjuries={() => {
             setSettings(null);

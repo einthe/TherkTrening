@@ -56,11 +56,13 @@ export function legacyInjuries(
     if (instance.componentDefinitionId === "graph") {
       const config = componentSchemas.graph.safeParse(instance.config);
       if (config.success)
-        for (const source of config.data.sources) {
-          for (const step of source.pipeline) {
-            if (step.key === "filter_target" && step.field === "injuryId")
-              ids.add(step.value);
-          }
+        for (const entry of config.data.entries) {
+          if (entry.source.type === "pain") ids.add(entry.source.target);
+          if (entry.source.type === "legacy")
+            for (const step of entry.source.pipeline) {
+              if (step.key === "filter_target" && step.field === "injuryId")
+                ids.add(step.value);
+            }
         }
     }
   }

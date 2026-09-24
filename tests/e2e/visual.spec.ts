@@ -21,19 +21,25 @@ test("dashboard renders without runtime errors at desktop and mobile sizes", asy
   });
   expect(errors).toEqual([]);
 });
-test("graph settings tolerate empty draft fields and persist valid replacements", async ({
+test("chart settings tolerate empty numeric drafts and persist replacements", async ({
   page,
 }) => {
   await page.goto("/demo");
   await page
     .getByRole("button", { name: "Settings for Training volume & pain" })
     .click();
-  await page.getByLabel("Exercise ID", { exact: true }).fill("");
+  const range = page.getByRole("spinbutton", { name: "Time range" });
+  await range.fill("");
   await expect(
     page.getByRole("dialog", { name: "Component settings" }),
   ).toBeVisible();
-  await page.getByLabel("Exercise ID", { exact: true }).fill("bench-press");
-  await page
+  await range.fill("28");
+  await page.locator(".chart-entry-settings summary").first().click();
+  const entry = page.getByRole("group", { name: "Entry 1", exact: true });
+  await entry
+    .getByRole("combobox", { name: "Exercise", exact: true })
+    .selectOption("bench-press");
+  await entry
     .getByRole("combobox", { name: "Display", exact: true })
     .selectOption("bar");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
@@ -42,10 +48,12 @@ test("graph settings tolerate empty draft fields and persist valid replacements"
   await page
     .getByRole("button", { name: "Settings for Training volume & pain" })
     .click();
-  await expect(page.getByLabel("Exercise ID", { exact: true })).toHaveValue(
-    "bench-press",
-  );
+  await expect(range).toHaveValue("28");
+  await page.locator(".chart-entry-settings summary").first().click();
   await expect(
-    page.getByRole("combobox", { name: "Display", exact: true }),
+    entry.getByRole("combobox", { name: "Exercise", exact: true }),
+  ).toHaveValue("bench-press");
+  await expect(
+    entry.getByRole("combobox", { name: "Display", exact: true }),
   ).toHaveValue("bar");
 });

@@ -2590,3 +2590,93 @@ tbody tr:hover {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
+.chart-settings,
+.chart-entry-fields {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.chart-settings > legend {
+  margin-bottom: 14px;
+  font-weight: 600;
+}
+.chart-entry-settings {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  min-width: 0;
+}
+.chart-entry-settings > details > summary {
+  min-height: 34px;
+  padding: 7px 84px 7px 0;
+  cursor: pointer;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+.chart-entry-reorder {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  gap: 6px;
+}
+.chart-entry-fields {
+  margin-top: 12px;
+}
+.chart-entry-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.chart-entry-color {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.chart-entry-color > label:first-child {
+  flex: 1;
+}
+.chart-entry-color input[type="color"] {
+  width: 64px;
+  height: 39px;
+  padding: 4px;
+}
+.chart-settings .form-grid > label,
+.chart-settings select {
+  min-width: 0;
+}
+.chart-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+.chart-explanation {
+  margin-top: 15px;
+}
+.chart-data-pages {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 10px;
+}
+.graph-legend > span {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+.graph-legend i {
+  flex-shrink: 0;
+}
+.chart-data table {
+  min-width: max-content;
+}
+.chart-data td {
+  white-space: nowrap;
+}

@@ -8,7 +8,11 @@ import {
   withoutWeights,
   fromTemplate,
 } from "@/lib/domain/workouts";
-import { makeInstance } from "@/lib/domain/components";
+import {
+  makeInstance,
+  volumePipeline,
+  componentSchemas,
+} from "@/lib/domain/components";
 // Runs the actual migration and RPCs in PostgreSQL (WASM). Only Supabase Auth's
 // external users table and JWT subject function are stubbed; RLS is real.
 let db: PGlite;
@@ -703,7 +707,19 @@ describe.sequential("PostgreSQL RLS and validated RPCs", () => {
       )?.active,
     ).toBe(false);
     await expect(
-      mutate({ action: "saveInstance", instance: makeInstance("graph", 1) }),
+      mutate({
+        action: "saveInstance",
+        instance: {
+          ...makeInstance("graph", 1),
+          config: {
+            days: 21,
+            display: "line",
+            sources: [
+              { name: "Squat", unit: "kg·reps", pipeline: volumePipeline() },
+            ],
+          },
+        },
+      }),
     ).rejects.toThrow("Operator unavailable");
   });
   it("revokes all normal data access after disabling an account", async () => {
@@ -1230,5 +1246,119 @@ describe.sequential("volleyball sessions", () => {
         ],
       }),
     ).rejects.toThrow("Invalid volleyball");
+  });
+  it("persists flexible chart sources/styles and rejects invalid nested settings", async () => {
+    await asUser(alice);
+    const config = componentSchemas.graph.parse(
+      makeInstance("graph", 0).config,
+    );
+    config.range = { amount: 12, unit: "weeks" };
+    config.entries.push(
+      {
+        ...config.entries[0],
+        id: crypto.randomUUID(),
+        source: {
+          type: "volleyball",
+          sessionType: "match",
+          metric: "setsPlayed",
+        },
+        display: "bar",
+        mode: "week",
+        color: "#22d3ee",
+      },
+      {
+        ...config.entries[0],
+        id: crypto.randomUUID(),
+        source: { type: "workout", target: "*", metric: "volume" },
+        display: "dots",
+        mode: "raw",
+      },
+      {
+        ...config.entries[0],
+        id: crypto.randomUUID(),
+        source: {
+          type: "measurement",
+          target: "weight",
+          unit: "kg",
+          metric: "value",
+        },
+      },
+    );
+    const instance = { ...makeInstance("graph", 0), config };
+    await mutate({ action: "saveInstance", instance });
+    expect(
+      (await rows("user_component_instances")).find((i) => i.id === instance.id)
+        ?.config,
+    ).toEqual(config);
+    for (const invalid of [
+      { ...config, range: { amount: 0, unit: "weeks" } },
+      { ...config, range: { amount: 366, unit: "days" } },
+      { ...config, range: { amount: 2.5, unit: "days" } },
+      { ...config, range: { amount: 2, unit: "months" } },
+      { ...config, entries: [] },
+      { ...config, entries: [config.entries[0], config.entries[0]] },
+      {
+        ...config,
+        entries: Array.from({ length: 21 }, () => ({
+          ...config.entries[0],
+          id: crypto.randomUUID(),
+        })),
+      },
+      ...[
+        { color: "url(evil)" },
+        { display: "pie" },
+        { mode: "monthly" },
+        { source: { type: "pain", target: "knee", metric: "volume" } },
+        { source: { type: "exercise", target: "", metric: "sets" } },
+        {
+          source: {
+            type: "volleyball",
+            sessionType: "tournament",
+            metric: "setsPlayed",
+          },
+        },
+        { source: { type: "measurement", target: "weight", metric: "value" } },
+        { source: { type: "sql", query: "select * from events" } },
+        { source: { ...config.entries[0].source, query: "select 1" } },
+      ].map((changes) => ({
+        ...config,
+        entries: [{ ...config.entries[0], ...changes }],
+      })),
+    ]) {
+      await expect(
+        mutate({
+          action: "saveInstance",
+          instance: { ...makeInstance("graph", 0), config: invalid },
+        }),
+      ).rejects.toThrow();
+    }
+  });
+  it("enforces disabled typed chart operators while allowing raw overrides", async () => {
+    async function active(key: string, value: boolean) {
+      await asUser(admin);
+      await db.query("select public.admin_mutate($1)", [
+        JSON.stringify({
+          action: "definition",
+          table: "operator_definitions",
+          key,
+          active: value,
+        }),
+      ]);
+      await asUser(alice);
+    }
+    await active("chart_source", false);
+    await expect(
+      mutate({ action: "saveInstance", instance: makeInstance("graph", 0) }),
+    ).rejects.toThrow("Operator unavailable");
+    await active("chart_source", true);
+    await active("chart_trend", false);
+    const instance = makeInstance("graph", 0);
+    await expect(mutate({ action: "saveInstance", instance })).rejects.toThrow(
+      "Operator unavailable",
+    );
+    const config = componentSchemas.graph.parse(instance.config);
+    config.entries = config.entries.map((entry) => ({ ...entry, mode: "raw" }));
+    await mutate({ action: "saveInstance", instance: { ...instance, config } });
+    await active("chart_trend", true);
   });
 });
