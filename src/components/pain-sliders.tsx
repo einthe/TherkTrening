@@ -1,11 +1,14 @@
 "use client";
-import { label, type PainReading } from "@/lib/domain/events";
+import { type PainReading } from "@/lib/domain/events";
+import { injuryName, type Injury } from "@/lib/domain/injuries";
 
 export function PainSliders({
   readings,
   onChange,
   disabled = false,
+  injuries,
 }: {
+  injuries: Injury[];
   readings: PainReading[];
   onChange: (readings: PainReading[]) => void;
   disabled?: boolean;
@@ -13,7 +16,7 @@ export function PainSliders({
   return readings.map((reading, index) => (
     <div className="pain-target" key={reading.injuryId}>
       <div className="pain-value">
-        <span>{label(reading.injuryId)}</span>
+        <span>{injuryName(reading.injuryId, injuries)}</span>
         <div>
           <strong>{reading.painLevel}</strong>
           <span> / 10</span>
@@ -25,7 +28,7 @@ export function PainSliders({
         style={
           { "--progress": `${reading.painLevel * 10}%` } as React.CSSProperties
         }
-        aria-label={`${label(reading.injuryId)} pain level`}
+        aria-label={`${injuryName(reading.injuryId, injuries)} pain level`}
         aria-valuetext={`${reading.painLevel} out of 10`}
         type="range"
         min="0"

@@ -36,7 +36,9 @@ Open <http://localhost:3000>. Without Supabase environment variables the app ope
 5. If email confirmation is enabled, change the confirmation email link to:
 
    ```html
-   <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email">Confirm your email</a>
+   <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email"
+     >Confirm your email</a
+   >
    ```
 
 6. Restart Next.js. Create your primary admin account at `/login`, and confirm the email if required.
@@ -60,12 +62,14 @@ Apply `202609240001_daily_event_lifecycle.sql` before deploying the daily loggin
 
 Apply `202609240002_reopen_pain_check_ins.sql` for adding injuries after today’s check-in: saving the component settings and reopening today’s event happen atomically. Existing readings, notes, and timestamps are preserved; the added slider is logged when **Save changes** is pressed.
 
+Apply `202609240003_injury_library.sql` before deploying the Injuries section. It creates private injury records from existing component labels, chart targets, and historical pain readings without changing their IDs or logs. New injuries are created in **Injuries**, then selected in pain component settings.
+
 ## Included functionality
 
 - Supabase email/password signup, login, confirmation, persisted cookie sessions, pending/rejected/disabled states, and logout.
 - One dashboard per user with add/remove/reorder, visibility, titles, tracked targets, notes, defaults, and chart settings.
 - Dashboard management lives on **Components**: use **Add component** to add cards and **Customize** to reorder or remove them. The optional **Last 7 days** component shows sessions, pain check-ins, and active days; its Settings control dashboard visibility.
-- Pain check-in tracks up to 12 injuries/body parts in one card, with a slider per target. Add or remove targets only in **Components → Settings**; the dashboard shows the sliders and logging controls. Choosing Pain check-in again from the component browser opens the existing card. **Save check-in** stores all readings as one event titled by its local weekday (for example, **Thursday - Pain check-in**) with a shared time and notes; history edits, locks, and deletes the whole check-in; removing a slider preserves its history.
+- Pain check-in tracks up to 12 injuries/body parts in one card, with a slider per target. Create and edit injury names and notes in **Injuries**; select or deselect them in **Components → Settings**; the dashboard shows the sliders and logging controls. Choosing Pain check-in again from the component browser opens the existing card. **Save check-in** stores all readings as one event titled by its local weekday (for example, **Thursday - Pain check-in**) with a shared time and notes; history edits, locks, and deletes the whole check-in; removing a slider preserves its history.
 - Daily logging: pain check-ins lock immediately and collapse to **Checked in today**. Select that message to expand the saved readings or log another date. Adding a new injury in Settings reopens today’s check-in with its existing readings, and saving updates and locks the same event. Today's saved workout stays in its card across navigation/reloads; **Save changes** updates that event. Workouts lock at local midnight. Backdated saves lock and reset the form; when today already has a saved entry, the card returns to that entry. Both cards reset at the next local day, including when a sleeping tab is reopened.
 - Workout cards with expandable exercises, independent reps/weight rows, a standard exercise list, and private custom exercises. One save creates a single workout record containing its exercises; history opens the same workout editor for updates.
 - Private workout templates, saved explicitly using **Save as template**. The **Workouts** page creates, edits, reorders, and deletes templates containing only exercises, sets, and reps. Adding exercises or loading a template prefills weights from the latest earlier logged occurrence of each exercise (matching set positions and repeating the final weight for extra sets); exercises without history start at zero. Templates themselves contain no weights; logging or changing the draft never overwrites the template. The **Exercises** page creates and edits names/descriptions, including personal overrides for standard exercises. Stable exercise IDs keep graphs and history linked.
@@ -79,7 +83,7 @@ Apply `202609240002_reopen_pain_check_ins.sql` for adding injuries after today�
 
 ## Reference workflow
 
-1. Add **Pain check-in**. Set title to `Left knee pain`, target to `left-knee`.
+1. Create **Left knee** in **Injuries**, then add **Pain check-in** and select it in the component settings.
 2. In **Components**, add **Workout**. On the dashboard, expand Squat to enter its sets; use **Add exercise** to build the rest of the workout. Create or edit exercises on the **Exercises** page.
 3. Add **Volume & pain**, using the default squat/left-knee sources and 21-day range.
 4. Save a pain reading. Zero-valued numeric inputs clear automatically on focus; nonzero values stay intact, with the caret at the end when focused. An empty field becomes zero on blur and saves as zero. Enter different reps and weights for each exercise, collapsing rows as you go. Name the workout and click **Save workout** to log it. To reuse its structure later, choose **Save as template**, give it a unique name, and click **Save template**. It will then appear under **Saved workouts**.

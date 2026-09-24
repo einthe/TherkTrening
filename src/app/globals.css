@@ -102,45 +102,87 @@
   --line: #333333;
   --text: #f5f5f5;
   --muted: #ababab;
-  --accent: #e8e8e8;
-  --accent-dark: #292929;
-  --on-accent: #121212;
+  --accent: #22d3ee;
+  --accent-dark: #123139;
+  --on-accent: #06252b;
   --text-soft: #d6d6d6;
   --subtle: #a0a0a0;
   --input: #101010;
   --surface-raised: #262626;
   --border-strong: #545454;
-  --accent-soft: #f0f0f0;
+  --accent-soft: #a5f3fc;
   --overview-from: #242424;
   --overview-to: #181818;
   --auth-glow: #353535;
-  --purple: #c4c4c4;
-  --chart-volume: #e8e8e8;
-  --chart-pain: #9e9e9e;
+  --purple: #c084fc;
+  --danger: #f87171;
+  --chart-volume: #4ade80;
+  --chart-pain: #f87171;
+  --black-red: #f87171;
+  --black-red-dark: #351a1a;
+  --black-blue: #60a5fa;
+  --black-blue-dark: #172942;
+  --black-green: #4ade80;
+  --black-green-dark: #142e1e;
 }
 :root[data-palette="black"] .card-icon,
 :root[data-palette="black"] .event-icon {
-  color: var(--text-soft);
-  background: var(--surface-raised);
+  color: var(--accent);
+  background: var(--accent-dark);
+}
+:root[data-palette="black"] .card-icon.pain_logger,
+:root[data-palette="black"] .event-icon.pain_measurement {
+  color: var(--black-red);
+  background: var(--black-red-dark);
+}
+:root[data-palette="black"] .card-icon.workout_logger,
+:root[data-palette="black"] .event-icon.workout,
+:root[data-palette="black"] .event-icon.exercise,
+:root[data-palette="black"] .event-icon.training_session {
+  color: var(--black-blue);
+  background: var(--black-blue-dark);
+}
+:root[data-palette="black"] .card-icon.recent_events {
+  color: #fbbf24;
+  background: #332914;
+}
+:root[data-palette="black"] .card-icon.value_logger,
+:root[data-palette="black"] .event-icon.measurement {
+  color: var(--purple);
+  background: #2e1c40;
+}
+:root[data-palette="black"] .card-icon.statistic,
+:root[data-palette="black"] .card-icon.session_logger {
+  color: var(--black-green);
+  background: var(--black-green-dark);
+}
+:root[data-palette="black"] .daily-complete {
+  color: var(--black-green);
+  background: var(--black-green-dark);
+}
+:root[data-palette="black"] .danger {
+  color: #fee2e2;
+  background: #7f1d1d;
+  border-color: #b91c1c;
 }
 :root[data-palette="black"] .pain-value strong {
-  color: var(--accent);
+  color: var(--black-red);
 }
 :root[data-palette="black"] .pain-slider {
   background: linear-gradient(
     to right,
-    var(--accent) var(--progress),
+    var(--black-red) var(--progress),
     var(--surface-raised) var(--progress)
   );
 }
 :root[data-palette="black"] .pain-slider::-webkit-slider-thumb {
-  border-color: var(--accent);
-  background: var(--border-strong);
-  box-shadow: 0 0 0 5px #ffffff18;
+  border-color: var(--black-red);
+  background: #991b1b;
+  box-shadow: 0 0 0 5px #f871711f;
 }
 :root[data-palette="black"] .pain-slider::-moz-range-thumb {
-  border-color: var(--accent);
-  background: var(--border-strong);
+  border-color: var(--black-red);
+  background: #991b1b;
 }
 :root[data-palette="amber"] {
   --bg: #1a140d;
@@ -2398,33 +2440,30 @@ tbody tr:hover {
     width: 100%;
   }
 }
-.pain-target-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.injury-picker {
+  display: grid;
+  gap: 12px;
   margin: 18px 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
 }
-.pain-target-editor > .button {
-  align-self: flex-start;
-}
-.pain-target-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.pain-target-chips > span {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  background: var(--surface-raised);
-  padding: 4px 8px;
-  border-radius: 6px;
+.injury-picker legend {
+  margin-bottom: 12px;
   color: var(--text-soft);
-  font-size: 12px;
 }
-.pain-target-chips .icon-button {
-  width: 28px;
-  height: 28px;
+.injury-picker .checkbox-label {
+  overflow-wrap: anywhere;
+}
+.injury-notes {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.injury-card h2 {
+  overflow-wrap: anywhere;
+}
+.injury-card > button {
+  flex-shrink: 0;
 }
 .pain-settings {
   margin-bottom: 20px;

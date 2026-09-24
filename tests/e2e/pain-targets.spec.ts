@@ -12,7 +12,26 @@ async function openSettings(page: Page) {
   return page.getByRole("dialog", { name: "Component settings" });
 }
 
-test("injuries are managed in settings, share one card, persist, and log together", async ({
+async function createInjury(page: Page, name: string, notes = "") {
+  await page.getByRole("button", { name: "Injuries", exact: true }).click();
+  await page.getByRole("button", { name: "New injury", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New injury", exact: true });
+  await dialog.getByLabel("Injury name", { exact: true }).fill(name);
+  await dialog.getByLabel("Notes (optional)").fill(notes);
+  await dialog
+    .getByRole("button", { name: "Save injury", exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  return page.evaluate(
+    (name) =>
+      JSON.parse(localStorage.getItem("therktrening-demo-v1")!).injuries.find(
+        (i: { name: string }) => i.name === name,
+      ).id as string,
+    name,
+  );
+}
+
+test("injury library preserves legacy history, supports rename and notes, and only selected injuries get sliders", async ({
   page,
 }, testInfo) => {
   await page.goto("/demo");
@@ -20,47 +39,32 @@ test("injuries are managed in settings, share one card, persist, and log togethe
   await expect(
     card.getByRole("slider", { name: "Left knee pain level" }),
   ).toBeVisible();
-  const original = await page.evaluate(
-    () =>
-      JSON.parse(localStorage.getItem("therktrening-demo-v1")!).instances.find(
-        (i: { componentDefinitionId: string }) =>
-          i.componentDefinitionId === "pain_logger",
-      ).id,
+  const before = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("therktrening-demo-v1")!),
   );
+  const shoulderId = await createInjury(
+    page,
+    "Right shoulder",
+    "Started after swimming.\nTrack after training.",
+  );
+  const backId = await createInjury(page, "Lower back");
+  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
+  await expect(card.getByRole("slider")).toHaveCount(1);
+  const settings = await openSettings(page);
   await expect(
-    page.getByLabel("Injury or body part", { exact: true }),
+    settings.getByRole("textbox", { name: "Injury name" }),
   ).toHaveCount(0);
-  await expect(card.getByRole("button", { name: /Stop tracking/ })).toHaveCount(
-    0,
-  );
-  const editor = await openSettings(page);
-  await editor
-    .getByLabel("Injury or body part", { exact: true })
-    .fill("Right shoulder");
-  await editor
-    .getByRole("button", { name: "Add injury / body part", exact: true })
-    .click();
-  await editor
-    .getByLabel("Injury or body part", { exact: true })
-    .fill("Lower back");
-  await editor
-    .getByLabel("Injury or body part", { exact: true })
-    .press("Enter");
-  await editor
-    .getByLabel("Injury or body part", { exact: true })
-    .fill("RIGHT SHOULDER");
-  await editor
-    .getByRole("button", { name: "Add injury / body part", exact: true })
-    .click();
-  await expect(editor.getByRole("alert")).toContainText("already track");
-  await editor
+  await settings
+    .getByRole("checkbox", { name: "Right shoulder", exact: true })
+    .check();
+  await settings
+    .getByRole("checkbox", { name: "Lower back", exact: true })
+    .check();
+  await settings
     .getByRole("button", { name: "Save changes", exact: true })
     .click();
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
   await expect(card.getByRole("slider")).toHaveCount(3);
-  await expect(
-    page.getByRole("button", { name: "Add injury / body part", exact: true }),
-  ).toHaveCount(0);
   await card.getByRole("slider", { name: "Left knee pain level" }).fill("7");
   await card
     .getByRole("slider", { name: "Right shoulder pain level" })
@@ -68,44 +72,50 @@ test("injuries are managed in settings, share one card, persist, and log togethe
   await card.getByRole("slider", { name: "Lower back pain level" }).fill("0");
   await card.locator(".when").getByRole("button").first().click();
   await card.getByLabel("Event date and time").fill("2020-01-02T10:00");
-  const countBefore = await page.evaluate(
-    () =>
-      JSON.parse(localStorage.getItem("therktrening-demo-v1")!).events.length,
-  );
   await card
     .getByRole("button", { name: "Save check-in", exact: true })
     .click();
   await expect(page.getByRole("status")).toContainText("Event saved");
-  const state = await page.evaluate(() =>
+  const logged = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("therktrening-demo-v1")!),
   );
-  const painCards = state.instances.filter(
-    (i: { componentDefinitionId: string }) =>
-      i.componentDefinitionId === "pain_logger",
-  );
-  expect(painCards).toHaveLength(1);
-  expect(painCards[0].id).toBe(original);
-  expect(painCards[0].config.targets).toEqual([
-    "left-knee",
-    "right-shoulder",
-    "lower-back",
+  expect(logged.events).toHaveLength(before.events.length + 1);
+  expect(logged.events.at(-1).payload.readings).toEqual([
+    { injuryId: "left-knee", painLevel: 7 },
+    { injuryId: shoulderId, painLevel: 2 },
+    { injuryId: backId, painLevel: 0 },
   ]);
-  expect(state.events).toHaveLength(countBefore + 1);
-  expect(state.events.at(-1).payload).toEqual({
-    readings: [
-      { injuryId: "left-knee", painLevel: 7 },
-      { injuryId: "right-shoulder", painLevel: 2 },
-      { injuryId: "lower-back", painLevel: 0 },
-    ],
-  });
-  expect(state.events.at(-1).batchId).toBeNull();
-  await page.reload();
-  await expect(card.getByRole("slider")).toHaveCount(3);
-  const removalSettings = await openSettings(page);
-  await removalSettings
-    .getByRole("button", { name: "Stop tracking Right shoulder", exact: true })
+  await page.getByRole("button", { name: "Injuries", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Edit Right shoulder injury", exact: true })
     .click();
-  await removalSettings
+  const edit = page.getByRole("dialog");
+  await expect(edit.getByLabel("Notes (optional)")).toHaveValue(
+    "Started after swimming.\nTrack after training.",
+  );
+  await edit.getByLabel("Injury name", { exact: true }).fill("Rotator cuff");
+  await edit.getByRole("button", { name: "Save injury", exact: true }).click();
+  await expect(edit).toHaveCount(0);
+  await page.reload();
+  await expect(
+    card.getByRole("slider", { name: "Rotator cuff pain level" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Event history", exact: true })
+    .click();
+  await page.getByLabel("Search events").fill("Rotator cuff");
+  await page
+    .getByRole("button", { name: "Thursday - Pain check-in", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog").getByText("Rotator cuff", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  const removal = await openSettings(page);
+  await removal
+    .getByRole("checkbox", { name: "Rotator cuff", exact: true })
+    .uncheck();
+  await removal
     .getByRole("button", { name: "Save changes", exact: true })
     .click();
   await page.getByRole("button", { name: "Dashboard", exact: true }).click();
@@ -113,59 +123,48 @@ test("injuries are managed in settings, share one card, persist, and log togethe
   const after = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("therktrening-demo-v1")!),
   );
-  expect(after.events).toEqual(state.events);
-  await page.getByRole("button", { name: "Components", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Add component", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: /Pain check-in.*Configure component/ })
-    .click();
-  const settings = page.getByRole("dialog", { name: "Component settings" });
-  await expect(settings).toBeVisible();
-  await settings
-    .getByLabel("Injury or body part", { exact: true })
-    .fill("Left ankle");
-  await settings
-    .getByRole("button", { name: "Add injury / body part", exact: true })
-    .click();
-  await settings
-    .getByRole("button", { name: "Save changes", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Dashboard", exact: true }).click();
-  await expect(card).toHaveCount(1);
-  await expect(card.getByRole("slider")).toHaveCount(3);
-  await expect(
-    card.getByRole("slider", { name: "Left ankle pain level" }),
-  ).toBeVisible();
+  expect(after.events).toEqual(logged.events);
+  expect(
+    after.instances.filter(
+      (i: { componentDefinitionId: string }) =>
+        i.componentDefinitionId === "pain_logger",
+    ),
+  ).toHaveLength(1);
+  await page.getByRole("button", { name: "Injuries", exact: true }).click();
   await page.screenshot({
-    path: testInfo.outputPath("pain-desktop.png"),
+    path: testInfo.outputPath("injuries-desktop.png"),
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect
-    .poll(() =>
-      page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-    )
-    .toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
   await page.screenshot({
-    path: testInfo.outputPath("pain-mobile.png"),
+    path: testInfo.outputPath("injuries-mobile.png"),
     fullPage: true,
   });
 });
 
-test("a failed settings save preserves the injury draft and stored targets", async ({
+test("failed settings saves preserve the selection and reject an empty selection", async ({
   page,
 }) => {
   await page.goto("/demo");
-  await expect(page.locator(".pain-logger").getByRole("slider")).toHaveCount(1);
+  await createInjury(page, "Right knee");
   const settings = await openSettings(page);
   await settings
-    .getByLabel("Injury or body part", { exact: true })
-    .fill("Right knee");
+    .getByRole("checkbox", { name: "Left knee", exact: true })
+    .uncheck();
   await settings
-    .getByRole("button", { name: "Add injury / body part", exact: true })
+    .getByRole("button", { name: "Save changes", exact: true })
     .click();
+  await expect(settings.getByRole("alert")).toContainText(
+    "Select at least one",
+  );
+  await settings
+    .getByRole("checkbox", { name: "Right knee", exact: true })
+    .check();
   await page.evaluate(() => {
     Storage.prototype.setItem = () => {
       throw new Error("Storage unavailable");
@@ -176,11 +175,8 @@ test("a failed settings save preserves the injury draft and stored targets", asy
     .click();
   await expect(settings.getByRole("alert")).toContainText("Could not save");
   await expect(
-    settings.getByRole("button", {
-      name: "Stop tracking Right knee",
-      exact: true,
-    }),
-  ).toBeVisible();
+    settings.getByRole("checkbox", { name: "Right knee", exact: true }),
+  ).toBeChecked();
   const targets = await page.evaluate(
     () =>
       JSON.parse(localStorage.getItem("therktrening-demo-v1")!).instances.find(
@@ -196,13 +192,11 @@ test("a check-in can be edited, locked, and deleted as one event", async ({
 }) => {
   await page.goto("/demo");
   await expect(page.locator(".pain-logger")).toBeVisible();
+  const shoulderId = await createInjury(page, "Right shoulder");
   const settings = await openSettings(page);
   await settings
-    .getByLabel("Injury or body part", { exact: true })
-    .fill("Right shoulder");
-  await settings
-    .getByRole("button", { name: "Add injury / body part", exact: true })
-    .click();
+    .getByRole("checkbox", { name: "Right shoulder", exact: true })
+    .check();
   await settings
     .getByRole("button", { name: "Save changes", exact: true })
     .click();
@@ -264,7 +258,7 @@ test("a check-in can be edited, locked, and deleted as one event", async ({
   );
   expect(updated.payload.readings).toEqual([
     { injuryId: "left-knee", painLevel: 0 },
-    { injuryId: "right-shoulder", painLevel: 4 },
+    { injuryId: shoulderId, painLevel: 4 },
   ]);
   expect(updated.notes).toBe("Both readings updated together");
   expect(updated.occurredAt).toContain("2020-01-02");
@@ -317,13 +311,11 @@ test("adding an injury reopens today's check-in and updates the same event", asy
     JSON.parse(localStorage.getItem("therktrening-demo-v1")!),
   );
   const saved = before.events.at(-1);
+  const shoulderId = await createInjury(page, "Right shoulder");
   const settings = await openSettings(page);
   await settings
-    .getByLabel("Injury or body part", { exact: true })
-    .fill("Right shoulder");
-  await settings
-    .getByRole("button", { name: "Add injury / body part", exact: true })
-    .click();
+    .getByRole("checkbox", { name: "Right shoulder", exact: true })
+    .check();
   await settings
     .getByRole("button", { name: "Save changes", exact: true })
     .click();
@@ -369,7 +361,7 @@ test("adding an injury reopens today's check-in and updates the same event", asy
     payload: {
       readings: [
         { injuryId: "left-knee", painLevel: 7 },
-        { injuryId: "right-shoulder", painLevel: 4 },
+        { injuryId: shoulderId, painLevel: 4 },
       ],
     },
   });

@@ -1,3 +1,4 @@
+import type { Injury, InjuryInput } from "@/lib/domain/injuries";
 import type {
   WorkoutTemplate,
   TemplateInput,
@@ -13,6 +14,7 @@ export type Snapshot = {
   profile: Profile;
   workoutTemplates: WorkoutTemplate[];
   customExercises: CustomExercise[];
+  injuries: Injury[];
   events: EventRecord[];
   instances: Instance[];
   definitions: {
@@ -22,6 +24,7 @@ export type Snapshot = {
   };
 };
 export type Mutation =
+  | { action: "saveInjury"; injury: InjuryInput; expectedUpdatedAt?: string }
   | {
       action: "saveWorkoutTemplate";
       template: TemplateInput;

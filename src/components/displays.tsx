@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
+import { injuryName, type Injury } from "@/lib/domain/injuries";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -37,12 +38,22 @@ export function Graph({
   instance,
   events,
   operators,
+  injuries,
 }: {
   instance: Instance;
   events: EventRecord[];
   operators: string[];
+  injuries: Injury[];
 }) {
   const config = componentSchemas.graph.parse(instance.config);
+  config.sources = config.sources.map((source) => {
+    const target = source.pipeline.find(
+      (step) => step.key === "filter_target" && step.field === "injuryId",
+    );
+    return target?.key === "filter_target"
+      ? { ...source, name: `${injuryName(target.value, injuries)} pain` }
+      : source;
+  });
   const [days, setDays] = useState(config.days);
   const result = useMemo(() => {
     try {

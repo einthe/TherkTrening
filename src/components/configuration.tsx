@@ -1,6 +1,7 @@
 "use client";
 import { NumericInput } from "./numeric-input";
 import { PainTargets } from "./pain-targets";
+import { injuryName, type Injury } from "@/lib/domain/injuries";
 import { useState } from "react";
 import {
   Heart,
@@ -81,8 +82,12 @@ export function ComponentSettings({
   position,
   onSave,
   onClose,
+  injuries,
+  onManageInjuries,
 }: {
   componentKey: ComponentKey;
+  injuries: Injury[];
+  onManageInjuries: () => void;
   existing?: Instance;
   position: number;
   onSave: (i: InstanceInput, expected?: string) => Promise<boolean>;
@@ -93,6 +98,8 @@ export function ComponentSettings({
     componentSchemas[componentKey].safeParse(existing.config).success;
   const [draft, setDraft] = useState(() => {
     const defaults = makeInstance(componentKey, position);
+    if (componentKey === "pain_logger" && !existing)
+      defaults.config = { targets: [], showNotes: false };
     if (!existing) return defaults;
     return instanceInputSchema.parse({
       id: existing.id,
@@ -113,6 +120,13 @@ export function ComponentSettings({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (
+      componentKey === "pain_logger" &&
+      !(config.targets as string[]).length
+    ) {
+      setError("Select at least one injury to track.");
+      return;
+    }
     const parsed = instanceInputSchema.safeParse(draft);
     if (!parsed.success) {
       setError(parsed.error.issues.map((i) => i.message).join(" "));
@@ -146,7 +160,9 @@ export function ComponentSettings({
     sources[index] = {
       ...sources[index],
       pipeline: isVolume ? volumePipeline(target) : painPipeline(target),
-      name: `${target.replace(/-/g, " ")} ${isVolume ? "volume" : "pain"}`,
+      name: isVolume
+        ? `${target.replace(/-/g, " ")} volume`
+        : `${injuryName(target, injuries)} pain`,
     };
     field("sources", sources);
   }
@@ -174,16 +190,21 @@ export function ComponentSettings({
         {componentKey === "pain_logger" && (
           <div className="pain-settings">
             <p className="micro">
-              Each injury or body part gets its own slider in this card.
+              Create and edit injury names and notes in the Injuries section.
             </p>
             <PainTargets
               targets={config.targets as string[]}
-              onChange={async (targets) => {
-                field("targets", targets);
-                return true;
-              }}
+              injuries={injuries}
+              onChange={(targets) => field("targets", targets)}
               disabled={busy}
             />
+            <button
+              type="button"
+              className="text-button"
+              onClick={onManageInjuries}
+            >
+              Manage injuries <ArrowRight size={14} />
+            </button>
           </div>
         )}
         {componentKey === "session_logger" && (
@@ -251,22 +272,43 @@ export function ComponentSettings({
                   (s) => s.key === "placeholder_volume_load",
                 )
                   ? "Exercise ID"
-                  : "Injury ID"}
-                <input
-                  required
-                  maxLength={80}
-                  value={
-                    source.pipeline.find((s) => s.key === "filter_target")
-                      ?.value ?? ""
-                  }
-                  onChange={(e) => sourceField(i, e.target.value)}
-                />
+                  : "Injury"}
+                {source.pipeline.some(
+                  (s) => s.key === "placeholder_volume_load",
+                ) ? (
+                  <input
+                    required
+                    maxLength={80}
+                    value={
+                      source.pipeline.find((s) => s.key === "filter_target")
+                        ?.value ?? ""
+                    }
+                    onChange={(e) => sourceField(i, e.target.value)}
+                  />
+                ) : (
+                  <select
+                    required
+                    value={
+                      source.pipeline.find((s) => s.key === "filter_target")
+                        ?.value ?? ""
+                    }
+                    onChange={(e) => sourceField(i, e.target.value)}
+                  >
+                    <option value="">Choose an injury</option>
+                    {injuries.map((injury) => (
+                      <option key={injury.id} value={injury.id}>
+                        {injury.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </label>
             ))}
             <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={graph.sources.length > 1}
+                disabled={!injuries.length && graph.sources.length < 2}
                 onChange={(e) =>
                   field(
                     "sources",
@@ -274,9 +316,11 @@ export function ComponentSettings({
                       ? [
                           ...graph.sources,
                           {
-                            name: "Left knee pain",
+                            name: `${injuries[0]?.name ?? "Injury"} pain`,
                             unit: "/10",
-                            pipeline: painPipeline(),
+                            pipeline: painPipeline(
+                              injuries[0]?.id ?? "left-knee",
+                            ),
                           },
                         ]
                       : graph.sources.slice(0, 1),

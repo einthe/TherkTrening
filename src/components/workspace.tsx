@@ -1,9 +1,11 @@
 "use client";
 import { WorkoutLibrary, ExerciseLibrary } from "./workout-library";
+import { InjuryLibrary } from "./injury-library";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
+  Heart,
   Dumbbell,
   NotebookPen,
   LayoutDashboard,
@@ -52,7 +54,13 @@ import { Admin } from "./admin";
 import { CardBoundary } from "./ui";
 
 type Page =
-  "dashboard" | "history" | "components" | "admin" | "workouts" | "exercises";
+  | "dashboard"
+  | "history"
+  | "components"
+  | "admin"
+  | "workouts"
+  | "exercises"
+  | "injuries";
 export function Workspace({ demo = false }: { demo?: boolean }) {
   const router = useRouter();
   const repository = useMemo(
@@ -155,6 +163,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     admin: "Administration",
     workouts: "Workouts",
     exercises: "Exercises",
+    injuries: "Injuries",
   };
   function renderComponent(i: Instance) {
     const props = { instance: i, events: snapshot!.events, save: saveEvents };
@@ -178,6 +187,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       return (
         <PainLogger
           key={day}
+          injuries={snapshot!.injuries}
           {...props}
           update={(event, expectedUpdatedAt) =>
             mutate(
@@ -214,7 +224,9 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
     )
       return <OtherLogger {...props} />;
     if (i.componentDefinitionId === "graph")
-      return <Graph {...props} operators={operators} />;
+      return (
+        <Graph {...props} operators={operators} injuries={snapshot!.injuries} />
+      );
     if (i.componentDefinitionId === "weekly_summary") {
       componentSchemas.weekly_summary.parse(i.config);
       return (
@@ -259,6 +271,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
               { key: "components", label: "Components", icon: PanelsTopLeft },
               { key: "workouts", label: "Workouts", icon: NotebookPen },
               { key: "exercises", label: "Exercises", icon: Dumbbell },
+              { key: "injuries", label: "Injuries", icon: Heart },
               ...(snapshot?.profile.role === "admin" && !demo
                 ? [{ key: "admin", label: "Administration", icon: ShieldCheck }]
                 : []),
@@ -467,8 +480,15 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
               {page === "exercises" && (
                 <ExerciseLibrary snapshot={snapshot} mutate={mutate} />
               )}
+              {page === "injuries" && (
+                <InjuryLibrary injuries={snapshot.injuries} mutate={mutate} />
+              )}
               {page === "history" && (
-                <EventHistory events={snapshot.events} onSelect={setSelected} />
+                <EventHistory
+                  events={snapshot.events}
+                  injuries={snapshot.injuries}
+                  onSelect={setSelected}
+                />
               )}{" "}
               {page === "components" && (
                 <div className="component-management">
@@ -603,6 +623,11 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
       )}
       {settings && (
         <ComponentSettings
+          injuries={snapshot?.injuries ?? []}
+          onManageInjuries={() => {
+            setSettings(null);
+            navigate("injuries");
+          }}
           key={settings.existing?.id ?? settings.key}
           componentKey={settings.key}
           existing={settings.existing}
@@ -626,6 +651,7 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
           event={snapshot.events.find((e) => e.id === selected.id) ?? selected}
           events={snapshot.events}
           customExercises={snapshot.customExercises}
+          injuries={snapshot.injuries}
           mutate={mutate}
           onClose={() => setSelected(null)}
         />

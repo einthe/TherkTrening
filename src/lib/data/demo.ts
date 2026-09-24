@@ -1,3 +1,4 @@
+import { injuryInputSchema, legacyInjuries } from "@/lib/domain/injuries";
 import {
   isEventLocked,
   nextLocalMidnight,
@@ -147,6 +148,7 @@ export function createDemo(): Snapshot {
     instances,
     workoutTemplates: [],
     customExercises: [],
+    injuries: legacyInjuries(events, instances),
     definitions: {
       components: componentDefinitions.map((d) => ({
         key: d.key,
@@ -199,6 +201,7 @@ export class DemoRepository implements Repository {
         updatedAt: e.updatedAt ?? "2000-01-01T00:00:00.000Z",
       }));
       state.customExercises ??= [];
+      state.injuries ??= legacyInjuries(state.events, state.instances);
       for (const instance of state.instances) {
         if ((instance.componentDefinitionId as string) === "exercise_logger") {
           const config = instance.config as {
@@ -262,7 +265,27 @@ export class DemoRepository implements Repository {
   async mutate(m: Mutation) {
     const s = await this.load();
     const now = new Date().toISOString();
-    if (m.action === "saveWorkoutTemplate") {
+    if (m.action === "saveInjury") {
+      const input = injuryInputSchema.parse(m.injury);
+      const old = s.injuries.find((injury) => injury.id === input.id);
+      if (
+        old
+          ? old.updatedAt !== m.expectedUpdatedAt
+          : Boolean(m.expectedUpdatedAt)
+      )
+        throw new Error("Injury changed elsewhere. Refresh and try again.");
+      if (
+        (!old || old.name.toLowerCase() !== input.name.toLowerCase()) &&
+        s.injuries.some(
+          (injury) =>
+            injury.id !== input.id &&
+            injury.name.toLowerCase() === input.name.toLowerCase(),
+        )
+      )
+        throw new Error("Invalid injury name: choose a unique name.");
+      if (old) Object.assign(old, input, { updatedAt: now });
+      else s.injuries.push({ ...input, updatedAt: now });
+    } else if (m.action === "saveWorkoutTemplate") {
       const input = templateInputSchema.parse(m.template);
       const old = s.workoutTemplates.find((t) => t.id === input.id);
       if (old && old.updatedAt !== m.expectedUpdatedAt)
@@ -386,6 +409,12 @@ export class DemoRepository implements Repository {
         const previous = old
           ? componentSchemas.pain_logger.parse(old.config).targets
           : [];
+        if (
+          targets.some((id) => !s.injuries.some((injury) => injury.id === id))
+        )
+          throw new Error(
+            "Invalid injury selection. Create injuries in the Injuries section first.",
+          );
         if (targets.some((target) => !previous.includes(target))) {
           const today = latestForDay(s.events, "pain_measurement", localDay());
           if (today) {

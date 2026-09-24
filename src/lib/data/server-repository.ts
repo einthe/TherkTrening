@@ -1,3 +1,4 @@
+import { injuryInputSchema } from "@/lib/domain/injuries";
 import {
   templateInputSchema,
   customExerciseSchema,
@@ -7,6 +8,13 @@ import { z } from "zod";
 import { eventInputSchema, type EventRecord } from "@/lib/domain/events";
 import { instanceInputSchema, type Instance } from "@/lib/domain/components";
 export const mutationSchema = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("saveInjury"),
+      injury: injuryInputSchema,
+      expectedUpdatedAt: z.string().optional(),
+    })
+    .strict(),
   z
     .object({
       action: z.literal("deleteWorkoutTemplate"),

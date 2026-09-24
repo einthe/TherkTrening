@@ -1,6 +1,7 @@
 "use client";
 import { isEventLocked } from "@/lib/domain/daily-events";
 import { PainSliders } from "./pain-sliders";
+import { injuryName, type Injury } from "@/lib/domain/injuries";
 import { WorkoutLogger } from "./workout-logger";
 import { NumericInput } from "./numeric-input";
 import { exerciseCatalog, type CustomExercise } from "@/lib/domain/workouts";
@@ -18,7 +19,6 @@ import {
 import {
   describeEvent,
   eventSearchText,
-  label,
   eventInputSchema,
   eventNames,
   eventTypes,
@@ -29,11 +29,21 @@ import {
 import { Modal, formatDate, formatTime, localInput } from "./ui";
 import { eventIcons } from "./displays";
 import type { Mutation } from "@/lib/data/repository";
+function painNames(event: EventRecord, injuries: Injury[]) {
+  if (event.eventType !== "pain_measurement") return "";
+  const payload = payloadSchemas.pain_measurement.safeParse(event.payload);
+  if (!payload.success) return "";
+  const readings =
+    "readings" in payload.data ? payload.data.readings : [payload.data];
+  return readings.map((r) => injuryName(r.injuryId, injuries)).join(" ");
+}
 export function EventHistory({
   events,
+  injuries,
   onSelect,
 }: {
   events: EventRecord[];
+  injuries: Injury[];
   onSelect: (event: EventRecord) => void;
 }) {
   const [type, setType] = useState("");
@@ -50,7 +60,9 @@ export function EventHistory({
         (!to ||
           Date.parse(e.occurredAt) <=
             new Date(`${to}T23:59:59.999`).getTime()) &&
-        eventSearchText(e).toLowerCase().includes(search.toLowerCase()),
+        (eventSearchText(e) + " " + painNames(e, injuries))
+          .toLowerCase()
+          .includes(search.toLowerCase()),
     )
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
   return (
@@ -204,11 +216,13 @@ export function EventDetail({
   events,
   mutate,
   customExercises,
+  injuries,
   onClose,
 }: {
   event: EventRecord;
   events: EventRecord[];
   customExercises: CustomExercise[];
+  injuries: Injury[];
   mutate: (m: Mutation, message?: string) => Promise<boolean>;
   onClose: () => void;
 }) {
@@ -366,6 +380,7 @@ export function EventDetail({
             ))}
           {pain?.success && "readings" in pain.data && (
             <PainSliders
+              injuries={injuries}
               readings={pain.data.readings}
               disabled={busy}
               onChange={(readings) => field("readings", readings)}
@@ -582,7 +597,7 @@ export function EventDetail({
                   : [recordedPain.data]
                 ).map((reading) => (
                   <Fragment key={reading.injuryId}>
-                    <dt>{label(reading.injuryId)}</dt>
+                    <dt>{injuryName(reading.injuryId, injuries)}</dt>
                     <dd>{reading.painLevel}/10</dd>
                   </Fragment>
                 ))}

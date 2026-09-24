@@ -73,6 +73,11 @@ test("reference flow: configure, log, graph, edit, lock, unlock, backdate, persi
   await page.getByRole("button", { name: "Edit event", exact: true }).click();
   await page.getByRole("slider", { name: "Left knee pain level" }).fill("2");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await page.getByRole("button", { name: "Injuries", exact: true }).click();
+  await page.getByRole("button", { name: "New injury", exact: true }).click();
+  await page.getByLabel("Injury name", { exact: true }).fill("Right knee");
+  await page.getByRole("button", { name: "Save injury", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("button", { name: "Components", exact: true }).click();
   await page
     .getByRole("button", { name: "Add component", exact: true })
@@ -81,12 +86,7 @@ test("reference flow: configure, log, graph, edit, lock, unlock, backdate, persi
     .getByRole("button", { name: /Pain check-in.*Configure component/ })
     .click();
   await page.getByLabel("Title", { exact: true }).fill("Morning joint check");
-  await page
-    .getByLabel("Injury or body part", { exact: true })
-    .fill("Right knee");
-  await page
-    .getByRole("button", { name: "Add injury / body part", exact: true })
-    .click();
+  await page.getByRole("checkbox", { name: "Right knee", exact: true }).check();
   await page.getByLabel("Show optional notes").check();
   await page
     .getByRole("button", { name: "Save changes", exact: true })

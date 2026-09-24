@@ -6,6 +6,7 @@ import {
 } from "@/lib/domain/daily-events";
 import { useLocalDay } from "./use-local-day";
 import { PainSliders } from "./pain-sliders";
+import type { Injury } from "@/lib/domain/injuries";
 import { NumericInput, useNumberCaret } from "./numeric-input";
 import { useState } from "react";
 import {
@@ -85,7 +86,9 @@ export function PainLogger({
   events,
   save,
   update,
+  injuries,
 }: Props & {
+  injuries: Injury[];
   update: (event: EventInput, expectedUpdatedAt: string) => Promise<boolean>;
 }) {
   const config = componentSchemas.pain_logger.parse(instance.config);
@@ -197,6 +200,7 @@ export function PainLogger({
         hidden={Boolean(completed) && !expanded}
       >
         <PainSliders
+          injuries={injuries}
           readings={readings}
           disabled={busy || Boolean(completed)}
           onChange={(readings) => {

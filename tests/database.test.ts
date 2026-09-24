@@ -14,6 +14,7 @@ import { makeInstance } from "@/lib/domain/components";
 let db: PGlite;
 let migratedCard: Record<string, unknown>;
 const migrationUser = "55555555-5555-4555-8555-555555555555";
+const injuryMigrationUser = "12121212-1212-4212-8212-121212121212";
 const migrationCard = "66666666-6666-4666-8666-666666666666";
 const alice = "11111111-1111-4111-8111-111111111111",
   bob = "22222222-2222-4222-8222-222222222222",
@@ -104,6 +105,36 @@ beforeAll(async () => {
           "88888888-8888-4888-8888-888888888888",
         ],
       );
+    }
+    if (file === "202609240003_injury_library.sql") {
+      await db.query("insert into auth.users values($1,$2)", [
+        injuryMigrationUser,
+        JSON.stringify({ username: "injurymigration" }),
+      ]);
+      await db.query(
+        "insert into public.user_component_instances(user_id,component_definition_id,title,position,config) values($1,'pain_logger','Pain',0,$2)",
+        [
+          injuryMigrationUser,
+          JSON.stringify({
+            targets: ["left-knee", "left_knee"],
+            showNotes: false,
+          }),
+        ],
+      );
+      for (const payload of [
+        { injuryId: "old-ankle", painLevel: 4 },
+        {
+          readings: [
+            { injuryId: "left-knee", painLevel: 3 },
+            { injuryId: "right-elbow", painLevel: 5 },
+          ],
+        },
+      ]) {
+        await db.query(
+          "insert into public.events(user_id,event_type,schema_version,occurred_at,payload) values($1,'pain_measurement',1,'2020-01-01T10:00:00Z',$2)",
+          [injuryMigrationUser, JSON.stringify(payload)],
+        );
+      }
     }
     await db.exec(readFileSync(`supabase/migrations/${file}`, "utf8"));
     if (file === "202609190002_workout_templates.sql")
@@ -893,6 +924,15 @@ describe("daily event lifecycle", () => {
 describe("adding injuries to today's saved pain check-in", () => {
   it("atomically saves targets and unlocks only today's own event, retaining readings and time", async () => {
     await asUser(alice);
+    for (const [id, name] of [
+      ["left-knee", "Left knee"],
+      ["right-shoulder", "Right shoulder"],
+    ]) {
+      await injuryLibrary({
+        action: "saveInjury",
+        injury: { id, name, notes: "" },
+      });
+    }
     const instance = makeInstance("pain_logger", 0);
     instance.config = { targets: ["left-knee"], showNotes: true };
     await mutate({ action: "saveInstance", instance, timeZone: "Europe/Oslo" });
@@ -974,5 +1014,118 @@ describe("adding injuries to today's saved pain check-in", () => {
     expect((await get(pain.id)).is_locked).toBe(true);
     await asUser(bob);
     expect((await get(other.id)).is_locked).toBe(true);
+  });
+});
+
+async function injuryLibrary(mutation: unknown) {
+  return db.query("select public.mutate_injury_library($1::jsonb)", [
+    JSON.stringify(mutation),
+  ]);
+}
+
+describe.sequential("injury library", () => {
+  it("migrates configured and historical labels without changing IDs or pain readings", async () => {
+    await asUser(injuryMigrationUser);
+    const injuries = await rows("user_injuries");
+    expect(injuries.map((i) => i.id).sort()).toEqual([
+      "left-knee",
+      "left_knee",
+      "old-ankle",
+      "right-elbow",
+    ]);
+    expect(injuries.filter((i) => i.name === "Left knee")).toHaveLength(2);
+    const originalEvents = await rows();
+    const knee = injuries.find((i) => i.id === "left-knee")!;
+    await injuryLibrary({
+      action: "saveInjury",
+      injury: {
+        id: knee.id,
+        name: knee.name,
+        notes: "Existing duplicate names can still have notes",
+      },
+      expectedUpdatedAt: knee.updated_at,
+    });
+    expect(await rows()).toEqual(originalEvents);
+  });
+
+  it("keeps injuries private, validates changes, and preserves history when renaming", async () => {
+    await asUser(alice);
+    const injury = {
+      id: crypto.randomUUID(),
+      name: "Achilles",
+      notes: "Morning stiffness",
+    };
+    const before = await rows();
+    await injuryLibrary({ action: "saveInjury", injury });
+    const saved = (await rows("user_injuries")).find(
+      (i) => i.id === injury.id,
+    )!;
+    await expect(
+      injuryLibrary({
+        action: "saveInjury",
+        injury: { ...injury, name: "Changed" },
+        expectedUpdatedAt: "2000-01-01T00:00:00Z",
+      }),
+    ).rejects.toThrow("changed elsewhere");
+    await injuryLibrary({
+      action: "saveInjury",
+      injury: { ...injury, name: "Left Achilles", notes: "Improving" },
+      expectedUpdatedAt: saved.updated_at,
+    });
+    expect(
+      (await rows("user_injuries")).find((i) => i.id === injury.id),
+    ).toMatchObject({ name: "Left Achilles", notes: "Improving" });
+    expect(await rows()).toEqual(before);
+    await expect(
+      injuryLibrary({
+        action: "saveInjury",
+        injury: { id: crypto.randomUUID(), name: " left achilles ", notes: "" },
+      }),
+    ).rejects.toThrow("unique name");
+    await expect(
+      injuryLibrary({
+        action: "saveInjury",
+        injury: {
+          id: crypto.randomUUID(),
+          name: "Bad",
+          notes: "x".repeat(4001),
+        },
+      }),
+    ).rejects.toThrow("Invalid injury");
+    await expect(
+      db.query("update public.user_injuries set notes='bypass' where id=$1", [
+        injury.id,
+      ]),
+    ).rejects.toThrow("permission denied");
+    await asUser(bob);
+    expect((await rows("user_injuries")).some((i) => i.id === injury.id)).toBe(
+      false,
+    );
+    await expect(
+      injuryLibrary({
+        action: "saveInjury",
+        injury,
+        expectedUpdatedAt: saved.updated_at,
+      }),
+    ).rejects.toThrow("changed elsewhere");
+    await expect(
+      mutate({
+        action: "saveInstance",
+        instance: {
+          ...makeInstance("pain_logger", 0),
+          config: { targets: [injury.id], showNotes: false },
+        },
+      }),
+    ).rejects.toThrow("Invalid injury selection");
+    await db.exec("reset role");
+    await db.query(
+      "update public.profiles set account_status='pending' where id=$1",
+      [pending],
+    );
+    await asUser(pending);
+    expect(await rows("user_injuries")).toHaveLength(0);
+    await expect(
+      injuryLibrary({ action: "saveInjury", injury }),
+    ).rejects.toThrow("Approved account required");
   });
 });

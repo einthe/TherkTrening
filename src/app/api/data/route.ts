@@ -33,6 +33,7 @@ export async function GET(request: Request) {
     operators,
     templates,
     exercises,
+    injuries,
   ] = await Promise.all([
     readAllEvents(db),
     db.from("user_component_instances").select("*").order("position"),
@@ -41,6 +42,7 @@ export async function GET(request: Request) {
     db.from("operator_definitions").select("key,name,version,active"),
     readAllRows(db, "workout_templates"),
     readAllRows(db, "user_exercises"),
+    readAllRows(db, "user_injuries"),
   ]);
   if (
     [
@@ -51,6 +53,7 @@ export async function GET(request: Request) {
       operators,
       templates,
       exercises,
+      injuries,
     ].some((r) => r.error)
   )
     return NextResponse.json(
@@ -60,6 +63,12 @@ export async function GET(request: Request) {
   return NextResponse.json(
     {
       profile,
+      injuries: injuries.data!.map((r) => ({
+        id: r.id,
+        name: r.name,
+        notes: r.notes,
+        updatedAt: r.updated_at,
+      })),
       workoutTemplates: templates.data!.map(templateFromRow),
       customExercises: exercises.data!.map((r) => ({
         id: r.id,
@@ -98,12 +107,14 @@ export async function POST(request: Request) {
     );
   const db = await supabaseServer();
   const { error } = await db.rpc(
-    body.data.action === "saveWorkoutTemplate" ||
-      body.data.action === "createExercise" ||
-      body.data.action === "saveExercise" ||
-      body.data.action === "deleteWorkoutTemplate"
-      ? "mutate_workout_library"
-      : "mutate_workspace",
+    body.data.action === "saveInjury"
+      ? "mutate_injury_library"
+      : body.data.action === "saveWorkoutTemplate" ||
+          body.data.action === "createExercise" ||
+          body.data.action === "saveExercise" ||
+          body.data.action === "deleteWorkoutTemplate"
+        ? "mutate_workout_library"
+        : "mutate_workspace",
     { mutation: body.data },
   );
   if (error) {
@@ -148,7 +159,7 @@ async function readAllEvents(db: Awaited<ReturnType<typeof supabaseServer>>) {
 
 async function readAllRows(
   db: Awaited<ReturnType<typeof supabaseServer>>,
-  table: "workout_templates" | "user_exercises",
+  table: "workout_templates" | "user_exercises" | "user_injuries",
 ) {
   const rows: Record<string, unknown>[] = [];
   for (let offset = 0; ; offset += 1000) {
